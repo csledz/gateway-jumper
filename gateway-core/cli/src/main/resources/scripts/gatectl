@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# gatectl bash launcher. Resolves the shaded CLI jar next to this script (or
+# under GATECTL_HOME) and hands argv to it via `java -jar`. Honours:
+#
+#   GATECTL_HOME   install dir (defaults to the script's directory)
+#   GATECTL_JAVA   java executable (defaults to $JAVA_HOME/bin/java or `java`)
+#   GATECTL_OPTS   extra JVM args, e.g. "-Xmx256m"
+
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+GATECTL_HOME="${GATECTL_HOME:-$script_dir}"
+
+if [[ -n "${GATECTL_JAVA:-}" ]]; then
+  java_bin="$GATECTL_JAVA"
+elif [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+  java_bin="$JAVA_HOME/bin/java"
+else
+  java_bin="java"
+fi
+
+# Pick newest gatectl-*-all.jar in GATECTL_HOME, fall back to gatectl.jar.
+jar="$(ls -t "$GATECTL_HOME"/gatectl-*-all.jar 2>/dev/null | head -n1 || true)"
+if [[ -z "$jar" && -f "$GATECTL_HOME/gatectl.jar" ]]; then
+  jar="$GATECTL_HOME/gatectl.jar"
+fi
+if [[ -z "$jar" ]]; then
+  echo "gatectl: unable to locate gatectl jar under $GATECTL_HOME" >&2
+  exit 1
+fi
+
+exec "$java_bin" ${GATECTL_OPTS:-} -jar "$jar" "$@"
