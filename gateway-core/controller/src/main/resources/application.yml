@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: ${CONTROLLER_PORT:8090}
+  shutdown: GRACEFUL
+
+spring:
+  application:
+    name: gateway-core-controller
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, info
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+controller:
+  # comma-separated list of data-plane URLs; discovery via Endpoints/Service can be added later
+  dataplane:
+    urls: ${CONTROLLER_DATAPLANE_URLS:}
+
+# fabric8 kubernetes-client picks up in-cluster config automatically when running inside a pod;
+# outside a pod it falls back to ~/.kube/config.
+kubernetes:
+  client:
+    namespace: ${CONTROLLER_NAMESPACE:}
+
+logging:
+  level:
+    io.telekom.gateway.controller: INFO
+    io.fabric8.kubernetes.client: WARN
