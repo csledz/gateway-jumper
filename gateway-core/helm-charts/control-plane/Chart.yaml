@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+# Helm 3+ rejects "/" in the chart name, so we use the hyphenated form here
+# and expose the canonical "gateway-core/control-plane" identifier via the
+# gateway.telekom.de/chart-name annotation below.
+name: gateway-core-control-plane
+description: |
+  Helm chart for the gateway-core control plane. Deploys the controller
+  (which watches GatewayRoute / GatewayZone / GatewayMeshPeer CRDs) and
+  the admin-status-api.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+keywords:
+  - gateway
+  - control-plane
+  - kong-free
+  - spring-cloud-gateway
+maintainers:
+  - name: telekom/gateway
+    url: https://github.com/telekom/gateway-jumper
+home: https://github.com/telekom/gateway-jumper
+sources:
+  - https://github.com/telekom/gateway-jumper
+annotations:
+  category: Networking
+  licenses: Apache-2.0
+  gateway.telekom.de/chart-name: gateway-core/control-plane

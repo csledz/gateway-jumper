@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Two-zone mesh example values.
+# The umbrella wires Zone A and Zone B data planes to a shared Redis backend
+# and configures each as a mesh peer of the other. A single control plane
+# reconciles CRDs for both zones.
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: false
+
+controlPlane:
+  enabled: true
+  replica-count: 2
+  controller:
+    watch-namespaces: []
+    log-level: INFO
+  service-monitor:
+    enabled: false
+  pdb:
+    enabled: true
+    min-available: 1
+
+zoneA:
+  enabled: true
+  name-override: gateway-zone-a
+  zone: zone-a
+  realm: default
+  issuer-url: https://iam-zone-a.example.com/realms/default
+  replica-count: 2
+  redis:
+    endpoint: two-zone-mesh-redis-master
+    port: 6379
+  hpa:
+    enabled: true
+    min-replicas: 2
+    max-replicas: 6
+    target-cpu-utilization-percentage: 70
+  mesh:
+    enabled: true
+    peers:
+      - name: zone-b
+        zone: zone-b
+        endpoint: https://gateway-zone-b.example.com
+        issuer-url: https://iam-zone-b.example.com/realms/default
+        jwks-url: https://iam-zone-b.example.com/realms/default/protocol/openid-connect/certs
+  service-monitor:
+    enabled: false
+
+zoneB:
+  enabled: true
+  name-override: gateway-zone-b
+  zone: zone-b
+  realm: default
+  issuer-url: https://iam-zone-b.example.com/realms/default
+  replica-count: 2
+  redis:
+    endpoint: two-zone-mesh-redis-master
+    port: 6379
+  hpa:
+    enabled: true
+    min-replicas: 2
+    max-replicas: 6
+    target-cpu-utilization-percentage: 70
+  mesh:
+    enabled: true
+    peers:
+      - name: zone-a
+        zone: zone-a
+        endpoint: https://gateway-zone-a.example.com
+        issuer-url: https://iam-zone-a.example.com/realms/default
+        jwks-url: https://iam-zone-a.example.com/realms/default/protocol/openid-connect/certs
+  service-monitor:
+    enabled: false
+
+# Demo CRs that the umbrella will render so the control plane has something
+# to reconcile immediately after install.
+demo:
+  enabled: true
+  routes:
+    - name: echo-route-a
+      zone: zone-a
+      path: /echo
+      upstream: http://echo-service.default.svc.cluster.local:8080
+    - name: echo-route-b
+      zone: zone-b
+      path: /echo
+      upstream: http://echo-service.default.svc.cluster.local:8080

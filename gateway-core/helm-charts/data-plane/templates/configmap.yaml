@@ -1,0 +1,102 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+
+Renders the Spring Boot application.yml consumed by the data-plane proxy.
+Chart-boundary keys are kebab-case; everything produced here is camelCase
+to match Spring's relaxed binding.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "data-plane.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "data-plane.labels" . | nindent 4 }}
+data:
+  application.yml: |
+    spring:
+      application:
+        name: {{ include "data-plane.fullname" . }}
+      {{- $redis := .Values.redis }}
+      data:
+        redis:
+          host: {{ $redis.endpoint | quote }}
+          port: {{ $redis.port }}
+          database: {{ $redis.database }}
+          ssl:
+            enabled: {{ $redis.ssl }}
+          timeout: {{ $redis.timeout }}
+      {{- $issuer := index .Values "issuer-url" }}
+      {{- if $issuer }}
+      security:
+        oauth2:
+          client:
+            provider:
+              gatewayIssuer:
+                issuerUri: {{ $issuer | quote }}
+      {{- end }}
+    {{- $springExtra := index .Values "spring-extra" }}
+    {{- if $springExtra }}
+    {{- toYaml $springExtra | nindent 4 }}
+    {{- end }}
+
+    server:
+      port: {{ .Values.service.ports.proxy }}
+
+    management:
+      server:
+        port: {{ .Values.service.ports.management }}
+      endpoints:
+        web:
+          exposure:
+            include: health,info,prometheus,metrics
+      endpoint:
+        health:
+          probes:
+            enabled: true
+      metrics:
+        tags:
+          zone: {{ .Values.zone | quote }}
+          realm: {{ .Values.realm | quote }}
+
+    gateway:
+      zone: {{ .Values.zone | quote }}
+      realm: {{ .Values.realm | quote }}
+      {{- $cp := index .Values "control-plane" }}
+      {{- if $cp }}
+      controlPlane:
+        adminStatusUrl: {{ index $cp "admin-status-url" | quote }}
+      {{- end }}
+      keypair:
+        secretRef: {{ include "data-plane.keypairSecretName" . | quote }}
+      {{- $mesh := .Values.mesh }}
+      mesh:
+        enabled: {{ $mesh.enabled }}
+        peers:
+          {{- range $mesh.peers }}
+          - name: {{ .name | quote }}
+            zone: {{ .zone | quote }}
+            endpoint: {{ .endpoint | quote }}
+            {{- with (index . "issuer-url") }}
+            issuerUrl: {{ . | quote }}
+            {{- end }}
+            {{- with (index . "jwks-url") }}
+            jwksUrl: {{ . | quote }}
+            {{- end }}
+          {{- end }}
+      {{- $ge := index .Values "gateway-extra" }}
+      {{- if $ge }}
+      {{- $filters := index $ge "default-filters" }}
+      {{- if $filters }}
+      defaultFilters:
+        {{- toYaml $filters | nindent 8 }}
+      {{- end }}
+      {{- $timeouts := $ge.timeouts }}
+      {{- if $timeouts }}
+      timeouts:
+        connect: {{ $timeouts.connect | quote }}
+        response: {{ $timeouts.response | quote }}
+      {{- end }}
+      {{- end }}

@@ -1,0 +1,166 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Default values for gateway-core/data-plane.
+# Keys at the chart boundary are kebab-case; the chart maps them to the
+# camelCase Spring configuration that the proxy consumes.
+
+name-override: ""
+fullname-override: ""
+
+# Logical zone name this data-plane instance represents (e.g. "zone-a").
+# Required — surfaced in metrics labels, routing decisions, and mesh peering.
+zone: ""
+
+# Identity realm (e.g. "default"). Free-form string used by the OAuth layer.
+realm: "default"
+
+# OAuth2 issuer URL; keypair in the secret below is used to sign tokens for
+# federated / mesh traffic.
+issuer-url: ""
+
+image:
+  repository: mtr.devops.telekom.de/tardis-internal/gateway/data-plane
+  tag: ""
+  pull-policy: IfNotPresent
+  pull-secrets: []
+
+replica-count: 3
+
+service-account:
+  create: true
+  name: ""
+  annotations: {}
+
+pod:
+  annotations: {}
+  labels: {}
+  security-context:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
+container:
+  security-context:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+service:
+  type: ClusterIP
+  ports:
+    proxy: 8080
+    management: 8081
+  annotations: {}
+
+redis:
+  # Connection endpoint used for rate-limiting + distributed session state.
+  endpoint: ""
+  port: 6379
+  # If non-empty, references a Secret containing a "password" key.
+  existing-secret: ""
+  password-key: "password"
+  database: 0
+  ssl: false
+  timeout: 2000ms
+
+keypair:
+  # Reference an existing Secret containing PKCS#8 key material.
+  # The Secret must carry two keys: "signing.key" (PEM private key) and
+  # "signing.crt" (PEM x509 certificate chain).
+  existing-secret: ""
+  # If existing-secret is empty, the chart will emit a placeholder Secret
+  # template — override these values via --set-file for production.
+  signing-key: ""
+  signing-certificate: ""
+
+mesh:
+  enabled: false
+  # Peers to trust for cross-zone federation. Each entry describes another
+  # zone's data-plane public endpoint and the issuer it uses for inbound tokens.
+  peers: []
+    # - name: zone-b
+    #   zone: zone-b
+    #   endpoint: https://gateway-zone-b.example.com
+    #   issuer-url: https://iam-zone-b.example.com/realms/default
+    #   jwks-url: https://iam-zone-b.example.com/realms/default/protocol/openid-connect/certs
+
+# Spring Boot overrides appended verbatim to application.yml under `spring:`.
+spring-extra: {}
+
+# Gateway-specific overrides appended verbatim to application.yml under
+# `gateway:`; useful for tuning timeouts, filters, etc.
+gateway-extra:
+  default-filters: []
+  timeouts:
+    connect: 2s
+    response: 30s
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+probes:
+  liveness:
+    path: /actuator/health/liveness
+    initial-delay-seconds: 30
+    period-seconds: 10
+    timeout-seconds: 3
+    failure-threshold: 3
+  readiness:
+    path: /actuator/health/readiness
+    initial-delay-seconds: 10
+    period-seconds: 5
+    timeout-seconds: 3
+    failure-threshold: 3
+
+hpa:
+  enabled: true
+  min-replicas: 3
+  max-replicas: 10
+  target-cpu-utilization-percentage: 70
+  target-memory-utilization-percentage: 80
+
+pdb:
+  enabled: true
+  min-available: 2
+  # max-unavailable: ""
+
+service-monitor:
+  enabled: false
+  namespace: ""
+  interval: 15s
+  scrape-timeout: 10s
+  path: /actuator/prometheus
+  port: management
+  labels: {}
+  relabelings: []
+  metric-relabelings: []
+
+network-policy:
+  enabled: false
+  ingress: []
+  egress: []
+
+# Reference to the control-plane service. Admin-status-api is consumed to
+# receive route updates.
+control-plane:
+  admin-status-url: ""   # e.g. http://gateway-core-control-plane.gateway-core.svc.cluster.local:8089
+
+node-selector: {}
+tolerations: []
+affinity: {}
+
+extra-env: []
+extra-env-from: []
+extra-volumes: []
+extra-volume-mounts: []

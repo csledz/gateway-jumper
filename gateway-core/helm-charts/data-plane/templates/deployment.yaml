@@ -1,0 +1,150 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- $hpaEnabled := .Values.hpa.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "data-plane.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "data-plane.labels" . | nindent 4 }}
+spec:
+  {{- if not $hpaEnabled }}
+  replicas: {{ index .Values "replica-count" }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "data-plane.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "data-plane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: data-plane
+        app.kubernetes.io/part-of: gateway-core
+        {{- if .Values.zone }}
+        gateway.telekom.de/zone: {{ .Values.zone | quote }}
+        {{- end }}
+        {{- with .Values.pod.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.pod.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "data-plane.serviceAccountName" . }}
+      {{- with (index .Values.image "pull-secrets") }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      {{- with (index .Values.pod "security-context") }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: proxy
+          image: {{ include "data-plane.image" . }}
+          imagePullPolicy: {{ index .Values.image "pull-policy" }}
+          {{- with (index .Values.container "security-context") }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: proxy
+              containerPort: {{ .Values.service.ports.proxy }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.service.ports.management }}
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: k8s
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: file:/etc/gateway-core/application.yml
+            - name: GATEWAY_ZONE
+              value: {{ .Values.zone | quote }}
+            - name: GATEWAY_REALM
+              value: {{ .Values.realm | quote }}
+            {{- $redis := .Values.redis }}
+            {{- if (index $redis "existing-secret") }}
+            - name: SPRING_DATA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ index $redis "existing-secret" }}
+                  key: {{ index $redis "password-key" }}
+            {{- end }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- with (index .Values "extra-env") }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with (index .Values "extra-env-from") }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: management
+            initialDelaySeconds: {{ index .Values.probes.liveness "initial-delay-seconds" }}
+            periodSeconds: {{ index .Values.probes.liveness "period-seconds" }}
+            timeoutSeconds: {{ index .Values.probes.liveness "timeout-seconds" }}
+            failureThreshold: {{ index .Values.probes.liveness "failure-threshold" }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: management
+            initialDelaySeconds: {{ index .Values.probes.readiness "initial-delay-seconds" }}
+            periodSeconds: {{ index .Values.probes.readiness "period-seconds" }}
+            timeoutSeconds: {{ index .Values.probes.readiness "timeout-seconds" }}
+            failureThreshold: {{ index .Values.probes.readiness "failure-threshold" }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/gateway-core
+              readOnly: true
+            - name: keypair
+              mountPath: /etc/gateway-core/keypair
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- with (index .Values "extra-volume-mounts") }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "data-plane.fullname" . }}-config
+        - name: keypair
+          secret:
+            secretName: {{ include "data-plane.keypairSecretName" . }}
+        - name: tmp
+          emptyDir: {}
+        {{- with (index .Values "extra-volumes") }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with (index .Values "node-selector") }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

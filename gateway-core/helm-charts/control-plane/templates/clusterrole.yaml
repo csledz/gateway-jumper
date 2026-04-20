@@ -1,0 +1,45 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "control-plane.fullname" . }}
+  labels:
+    {{- include "control-plane.labels" . | nindent 4 }}
+rules:
+  # Watch gateway-core CRDs.
+  - apiGroups: ["gateway.telekom.de"]
+    resources:
+      - gatewayroutes
+      - gatewayzones
+      - gatewaymeshpeers
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.telekom.de"]
+    resources:
+      - gatewayroutes/status
+      - gatewayzones/status
+      - gatewaymeshpeers/status
+    verbs: ["get", "update", "patch"]
+  # Discover Services / Endpoints for backend resolution.
+  - apiGroups: [""]
+    resources:
+      - services
+      - endpoints
+      - configmaps
+    verbs: ["get", "list", "watch"]
+  # Leader election via leases.
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Emit events for reconciliation feedback.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  {{- with (index .Values.rbac "extra-rules") }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

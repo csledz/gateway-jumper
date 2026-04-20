@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telekom.de/gateway-core/data-plane/values.schema.json",
+  "title": "gateway-core/data-plane values",
+  "description": "Schema for the data-plane Helm chart.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name-override": { "type": "string" },
+    "fullname-override": { "type": "string" },
+    "zone": {
+      "type": "string",
+      "description": "Logical zone name; must be a valid DNS label when set.",
+      "anyOf": [
+        { "const": "" },
+        { "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" }
+      ]
+    },
+    "realm": { "type": "string" },
+    "issuer-url": {
+      "type": "string",
+      "description": "OAuth2 issuer URL for token signing.",
+      "anyOf": [
+        { "format": "uri" },
+        { "const": "" }
+      ]
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "pull-policy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pull-policy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pull-secrets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "replica-count": { "type": "integer", "minimum": 0 },
+    "service-account": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "pod": {
+      "type": "object",
+      "properties": {
+        "annotations": { "type": "object" },
+        "labels": { "type": "object" },
+        "security-context": { "type": "object" }
+      }
+    },
+    "container": {
+      "type": "object",
+      "properties": {
+        "security-context": { "type": "object" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "ports": {
+          "type": "object",
+          "properties": {
+            "proxy": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "management": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
+        "annotations": { "type": "object" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "properties": {
+        "endpoint": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "existing-secret": { "type": "string" },
+        "password-key": { "type": "string" },
+        "database": { "type": "integer", "minimum": 0 },
+        "ssl": { "type": "boolean" },
+        "timeout": { "type": "string" }
+      }
+    },
+    "keypair": {
+      "type": "object",
+      "properties": {
+        "existing-secret": { "type": "string" },
+        "signing-key": { "type": "string" },
+        "signing-certificate": { "type": "string" }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "peers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "zone", "endpoint"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "zone": { "type": "string", "minLength": 1 },
+              "endpoint": { "type": "string", "format": "uri" },
+              "issuer-url": { "type": "string" },
+              "jwks-url": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "spring-extra": { "type": "object" },
+    "gateway-extra": { "type": "object" },
+    "resources": { "type": "object" },
+    "probes": { "type": "object" },
+    "hpa": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "min-replicas": { "type": "integer", "minimum": 1 },
+        "max-replicas": { "type": "integer", "minimum": 1 },
+        "target-cpu-utilization-percentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 },
+        "target-memory-utilization-percentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 }
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "min-available": { "type": ["integer", "string"] },
+        "max-unavailable": { "type": ["integer", "string"] }
+      }
+    },
+    "service-monitor": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "interval": { "type": "string" },
+        "scrape-timeout": { "type": "string" },
+        "path": { "type": "string" },
+        "port": { "type": "string" },
+        "labels": { "type": "object" },
+        "relabelings": { "type": "array" },
+        "metric-relabelings": { "type": "array" }
+      }
+    },
+    "network-policy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingress": { "type": "array" },
+        "egress": { "type": "array" }
+      }
+    },
+    "control-plane": {
+      "type": "object",
+      "properties": {
+        "admin-status-url": { "type": "string" }
+      }
+    },
+    "node-selector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "extra-env": { "type": "array" },
+    "extra-env-from": { "type": "array" },
+    "extra-volumes": { "type": "array" },
+    "extra-volume-mounts": { "type": "array" }
+  }
+}

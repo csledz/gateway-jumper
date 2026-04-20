@@ -1,0 +1,155 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- $admin := index .Values "admin-status-api" -}}
+{{- $hpaEnabled := .Values.hpa.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "control-plane.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "control-plane.labels" . | nindent 4 }}
+spec:
+  {{- if not $hpaEnabled }}
+  replicas: {{ index .Values "replica-count" }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "control-plane.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "control-plane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: control-plane
+        app.kubernetes.io/part-of: gateway-core
+        {{- with .Values.pod.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/values: {{ .Values | toYaml | sha256sum }}
+        {{- with .Values.pod.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "control-plane.serviceAccountName" . }}
+      {{- with (index .Values.image "pull-secrets") }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      {{- with (index .Values.pod "security-context") }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: controller
+          image: {{ include "control-plane.image" . }}
+          imagePullPolicy: {{ index .Values.image "pull-policy" }}
+          {{- with (index .Values.container "security-context") }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.http }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.service.ports.admin }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.service.ports.management }}
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: k8s
+            - name: GATEWAY_CONTROLLER_LEADER_ELECTION_ENABLED
+              value: {{ index .Values.controller "leader-election" "enabled" | quote }}
+            - name: GATEWAY_CONTROLLER_LEADER_ELECTION_LEASE_NAME
+              value: {{ index .Values.controller "leader-election" "lease-name" | quote }}
+            - name: GATEWAY_CONTROLLER_RECONCILE_INTERVAL
+              value: {{ index .Values.controller "reconcile-interval" | quote }}
+            - name: GATEWAY_CONTROLLER_WATCH_NAMESPACES
+              value: {{ join "," (index .Values.controller "watch-namespaces") | quote }}
+            - name: LOGGING_LEVEL_DE_TELEKOM_GATEWAY
+              value: {{ index .Values.controller "log-level" | quote }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- with (index .Values "extra-env") }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with (index .Values "extra-env-from") }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: management
+            initialDelaySeconds: {{ index .Values.probes.liveness "initial-delay-seconds" }}
+            periodSeconds: {{ index .Values.probes.liveness "period-seconds" }}
+            timeoutSeconds: {{ index .Values.probes.liveness "timeout-seconds" }}
+            failureThreshold: {{ index .Values.probes.liveness "failure-threshold" }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: management
+            initialDelaySeconds: {{ index .Values.probes.readiness "initial-delay-seconds" }}
+            periodSeconds: {{ index .Values.probes.readiness "period-seconds" }}
+            timeoutSeconds: {{ index .Values.probes.readiness "timeout-seconds" }}
+            failureThreshold: {{ index .Values.probes.readiness "failure-threshold" }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with (index .Values "extra-volume-mounts") }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if $admin.enabled }}
+        - name: admin-status-api
+          image: {{ include "control-plane.adminStatusApiImage" . }}
+          imagePullPolicy: {{ index $admin.image "pull-policy" }}
+          {{- with (index .Values.container "security-context") }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: admin-status
+              containerPort: {{ $admin.port }}
+              protocol: TCP
+          env:
+            - name: ADMIN_STATUS_API_PORT
+              value: {{ $admin.port | quote }}
+            - name: CONTROL_PLANE_ADMIN_URL
+              value: http://localhost:{{ .Values.service.ports.admin }}
+          resources:
+            {{- toYaml $admin.resources | nindent 12 }}
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with (index .Values "extra-volumes") }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with (index .Values "node-selector") }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

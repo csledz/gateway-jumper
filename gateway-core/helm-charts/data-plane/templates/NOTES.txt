@@ -1,0 +1,18 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+gateway-core data-plane installed as {{ include "data-plane.fullname" . }}
+(zone={{ .Values.zone }}, realm={{ .Values.realm }}) in namespace {{ .Release.Namespace }}.
+
+Redis endpoint: {{ .Values.redis.endpoint }}:{{ .Values.redis.port }}
+Keypair secret: {{ include "data-plane.keypairSecretName" . }}
+Mesh enabled:   {{ .Values.mesh.enabled }}
+Mesh peers:     {{ len .Values.mesh.peers }}
+
+Proxy Service endpoint (inside cluster):
+  http://{{ include "data-plane.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.ports.proxy }}
+
+Scrape /actuator/prometheus on port "management" ({{ .Values.service.ports.management }})
+via ServiceMonitor ({{ (index .Values "service-monitor").enabled | ternary "enabled" "disabled" }}).

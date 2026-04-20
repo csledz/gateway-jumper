@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+# Helm 3+ rejects "/" in chart names, so we use the hyphenated form here.
+name: gateway-core-two-zone-mesh
+description: |
+  Umbrella Helm chart that deploys two federated gateway-core zones
+  (Zone A + Zone B) plus a shared Redis backend. Demonstrates the
+  values-schema-driven zone-federation wiring.
+
+  Each zone is a separate subchart instance (alias) of the
+  gateway-core-data-plane chart; the control-plane subchart
+  reconciles the demo CRs shipped under templates/.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+keywords:
+  - gateway
+  - example
+  - zone-federation
+  - mesh
+maintainers:
+  - name: telekom/gateway
+    url: https://github.com/telekom/gateway-jumper
+home: https://github.com/telekom/gateway-jumper
+sources:
+  - https://github.com/telekom/gateway-jumper
+annotations:
+  gateway.telekom.de/chart-name: gateway-core/two-zone-mesh
+dependencies:
+  - name: gateway-core-control-plane
+    alias: controlPlane
+    version: 0.1.0
+    repository: "file://../../control-plane"
+    condition: controlPlane.enabled
+  - name: gateway-core-data-plane
+    alias: zoneA
+    version: 0.1.0
+    repository: "file://../../data-plane"
+    condition: zoneA.enabled
+  - name: gateway-core-data-plane
+    alias: zoneB
+    version: 0.1.0
+    repository: "file://../../data-plane"
+    condition: zoneB.enabled
+  - name: redis
+    version: "20.6.2"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

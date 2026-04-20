@@ -1,0 +1,54 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- $np := index .Values "network-policy" -}}
+{{- if $np.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "control-plane.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "control-plane.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "control-plane.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if $np.egress }}
+    - Egress
+    {{- end }}
+  {{- with $np.ingress }}
+  ingress:
+    {{- range . }}
+    - {{- with .from }}
+      from:
+      {{- range . }}
+        - {{- if index . "pod-selector" }}
+          podSelector:
+            {{- toYaml (index . "pod-selector") | nindent 12 }}
+          {{- end }}
+          {{- if index . "namespace-selector" }}
+          namespaceSelector:
+            {{- toYaml (index . "namespace-selector") | nindent 12 }}
+          {{- end }}
+          {{- if index . "ip-block" }}
+          ipBlock:
+            {{- toYaml (index . "ip-block") | nindent 12 }}
+          {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- with .ports }}
+      ports:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- with $np.egress }}
+  egress:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

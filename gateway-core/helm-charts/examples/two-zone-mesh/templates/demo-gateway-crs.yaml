@@ -1,0 +1,92 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+
+Demo GatewayRoute / GatewayZone / GatewayMeshPeer CRs, rendered only when
+demo.enabled is true. These objects drive reconciliation by the control
+plane installed from the gateway-core/control-plane subchart.
+*/}}
+{{- if .Values.demo.enabled }}
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayZone
+metadata:
+  name: zone-a
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: gateway-core
+    gateway.telekom.de/zone: zone-a
+spec:
+  zone: zone-a
+  realm: {{ .Values.zoneA.realm | quote }}
+  issuerUrl: {{ index .Values.zoneA "issuer-url" | quote }}
+  dataPlaneService:
+    name: {{ .Release.Name }}-gateway-zone-a
+    namespace: {{ .Release.Namespace }}
+    port: 8080
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayZone
+metadata:
+  name: zone-b
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: gateway-core
+    gateway.telekom.de/zone: zone-b
+spec:
+  zone: zone-b
+  realm: {{ .Values.zoneB.realm | quote }}
+  issuerUrl: {{ index .Values.zoneB "issuer-url" | quote }}
+  dataPlaneService:
+    name: {{ .Release.Name }}-gateway-zone-b
+    namespace: {{ .Release.Namespace }}
+    port: 8080
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayMeshPeer
+metadata:
+  name: zone-a-to-zone-b
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: gateway-core
+spec:
+  sourceZone: zone-a
+  targetZone: zone-b
+  endpoint: https://gateway-zone-b.example.com
+  issuerUrl: https://iam-zone-b.example.com/realms/default
+  jwksUrl: https://iam-zone-b.example.com/realms/default/protocol/openid-connect/certs
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayMeshPeer
+metadata:
+  name: zone-b-to-zone-a
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: gateway-core
+spec:
+  sourceZone: zone-b
+  targetZone: zone-a
+  endpoint: https://gateway-zone-a.example.com
+  issuerUrl: https://iam-zone-a.example.com/realms/default
+  jwksUrl: https://iam-zone-a.example.com/realms/default/protocol/openid-connect/certs
+{{- range .Values.demo.routes }}
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayRoute
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: gateway-core
+    gateway.telekom.de/zone: {{ .zone }}
+spec:
+  zone: {{ .zone }}
+  predicates:
+    - path: {{ .path }}
+  upstream:
+    url: {{ .upstream }}
+  filters:
+    - name: PreserveHostHeader
+{{- end }}
+{{- end }}
