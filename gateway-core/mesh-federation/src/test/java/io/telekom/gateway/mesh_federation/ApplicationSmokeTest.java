@@ -12,6 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(
     properties = {
       "spring.data.redis.host=localhost",
+      "gateway.mesh.pubsub-enabled=false",
       "spring.autoconfigure.exclude="
           + "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,"
           + "org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration"
