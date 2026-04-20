@@ -50,6 +50,14 @@ SPDX-License-Identifier: Apache-2.0
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Cucumber 7.30 needs junit-platform >= 1.13 (DiscoveryIssueReporter). -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.14.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -83,6 +91,17 @@ SPDX-License-Identifier: Apache-2.0
             <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
 
+        <!-- OTel API + SDK are needed by TracingCustomizer (OpenTelemetrySdk,
+             Attributes) which otherwise only pulls them transitively and
+             unreliably across the exporter coords. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+        </dependency>
         <!-- OTLP exporter (activated via profile) -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
@@ -144,6 +163,8 @@ SPDX-License-Identifier: Apache-2.0
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <!-- observability is a library module (no main class); skip repackage. -->
+                    <skip>true</skip>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
