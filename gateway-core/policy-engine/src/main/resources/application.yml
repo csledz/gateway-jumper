@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+spring:
+  application:
+    name: policy-engine
+  main:
+    web-application-type: reactive
+
+server:
+  port: 0
+
+gateway:
+  policy:
+    # Default policy language used by the evaluator for newly registered policies
+    default-language: SPEL
+    # Activate the Rego adapter. Requires the `rego` Maven profile (com.styra:opa-java)
+    # OR the built-in minimal Rego subset shipped with this module.
+    rego:
+      enabled: false
+
+logging:
+  level:
+    io.telekom.gateway.policy_engine: INFO
