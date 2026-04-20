@@ -34,7 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       modules: ${{ steps.discover.outputs.modules }}
+      java-modules: ${{ steps.discover.outputs.java-modules }}
       has-modules: ${{ steps.discover.outputs.has-modules }}
+      has-java-modules: ${{ steps.discover.outputs.has-java-modules }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
@@ -43,35 +45,50 @@ jobs:
         run: |
           set -euo pipefail
           # A gateway-core module is any directory one level below gateway-core/
-          # that contains a pom.xml.
+          # that contains a pom.xml. Modules with Java sources also run Spotless;
+          # pom-packaging / infra-only modules (helm-charts, api-crds) skip it.
           modules=()
+          java_modules=()
           if [ -d gateway-core ]; then
             while IFS= read -r pom; do
               dir="$(dirname "$pom")"
-              # Strip the leading "gateway-core/" prefix for the matrix entry.
-              modules+=("${dir#gateway-core/}")
+              name="${dir#gateway-core/}"
+              modules+=("${name}")
+              if [ -d "${dir}/src/main/java" ] || [ -d "${dir}/src/test/java" ]; then
+                java_modules+=("${name}")
+              fi
             done < <(find gateway-core -mindepth 2 -maxdepth 2 -name pom.xml | sort)
           fi
           if [ "${#modules[@]}" -eq 0 ]; then
             echo "No gateway-core modules found yet."
             echo "modules=[]" >> "${GITHUB_OUTPUT}"
+            echo "java-modules=[]" >> "${GITHUB_OUTPUT}"
             echo "has-modules=false" >> "${GITHUB_OUTPUT}"
+            echo "has-java-modules=false" >> "${GITHUB_OUTPUT}"
           else
             json="$(printf '%s\n' "${modules[@]}" | jq -R . | jq -s -c .)"
+            java_json="$(printf '%s\n' "${java_modules[@]}" | jq -R . | jq -s -c .)"
             echo "Discovered modules: ${json}"
+            echo "Java modules:       ${java_json}"
             echo "modules=${json}" >> "${GITHUB_OUTPUT}"
+            echo "java-modules=${java_json}" >> "${GITHUB_OUTPUT}"
             echo "has-modules=true" >> "${GITHUB_OUTPUT}"
+            if [ "${#java_modules[@]}" -gt 0 ]; then
+              echo "has-java-modules=true" >> "${GITHUB_OUTPUT}"
+            else
+              echo "has-java-modules=false" >> "${GITHUB_OUTPUT}"
+            fi
           fi
 
   spotless:
     name: Spotless (${{ matrix.module }})
     runs-on: ubuntu-latest
     needs: [discover-modules]
-    if: needs.discover-modules.outputs.has-modules == 'true'
+    if: needs.discover-modules.outputs.has-java-modules == 'true'
     strategy:
       fail-fast: false
       matrix:
-        module: ${{ fromJson(needs.discover-modules.outputs.modules) }}
+        module: ${{ fromJson(needs.discover-modules.outputs.java-modules) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
@@ -140,11 +157,16 @@ jobs:
             echo "No modules discovered; skipping fail check."
             exit 0
           fi
-          # Treat skipped matrix parents as failure only if the discovery step
-          # actually found modules (guarded above).
-          for result in "${{ needs.spotless.result }}" "${{ needs.verify.result }}"; do
-            case "${result}" in
+          # Spotless runs only when at least one Java module is present; treat
+          # a "skipped" spotless result as success in that case, and evaluate
+          # verify strictly.
+          if [ "${{ needs.discover-modules.outputs.has-java-modules }}" = "true" ]; then
+            case "${{ needs.spotless.result }}" in
               success) ;;
-              *) echo "Upstream job failed: ${result}"; exit 1 ;;
+              *) echo "Spotless failed: ${{ needs.spotless.result }}"; exit 1 ;;
             esac
-          done
+          fi
+          case "${{ needs.verify.result }}" in
+            success) ;;
+            *) echo "Verify failed: ${{ needs.verify.result }}"; exit 1 ;;
+          esac

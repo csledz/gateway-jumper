@@ -31,7 +31,8 @@ import org.springframework.web.reactive.function.client.ClientRequestObservation
  * Configures tracing — propagation, OTLP export and span-name customization.
  *
  * <p>B3_MULTI propagation is configured via {@code application.yml}. OTLP export is activated with
- * the {@code otlp} Spring profile, or explicitly via {@code gateway.observability.tracing.otlp.enabled=true}.
+ * the {@code otlp} Spring profile, or explicitly via {@code
+ * gateway.observability.tracing.otlp.enabled=true}.
  */
 @Slf4j
 @Configuration(proxyBeanMethods = false)
@@ -93,7 +94,8 @@ public class TracingCustomizer {
       matchIfMissing = true)
   @ConditionalOnMissingBean
   public OpenTelemetrySdk otlpTracerProvider(
-      @Value("${gateway.observability.tracing.otlp.endpoint:http://localhost:4317}") String endpoint,
+      @Value("${gateway.observability.tracing.otlp.endpoint:http://localhost:4317}")
+          String endpoint,
       @Value("${spring.application.name:gateway-core}") String serviceName) {
     log.info("OTLP tracing enabled (endpoint={}, service={})", endpoint, serviceName);
     OtlpGrpcSpanExporter exporter = OtlpGrpcSpanExporter.builder().setEndpoint(endpoint).build();

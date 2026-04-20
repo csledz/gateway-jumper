@@ -21,14 +21,16 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class TracingSteps {
 
   @Autowired private SecretRedactor redactor;
-  @Autowired(required = false) private Tracer tracer;
+
+  @Autowired(required = false)
+  private Tracer tracer;
+
   @LocalServerPort private int port;
 
   private ResponseEntity<String> lastResponse;
   private String filteredUrl;
 
-  @When(
-      "a client calls {string} {string} with B3 trace header {string}")
+  @When("a client calls {string} {string} with B3 trace header {string}")
   public void callWithB3(String method, String path, String b3Header) {
     lastResponse =
         WebClient.create("http://localhost:" + port)

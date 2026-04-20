@@ -21,9 +21,9 @@ import org.springframework.web.util.UriComponentsBuilder;
  * Redacts sensitive parameters and headers before they become part of span names, tags or log
  * lines.
  *
- * <p>Ported from jumper's {@code TracingConfiguration} (lines 31-100) and extended with
- * {@link #redactHeaderValue(String, String)} so that header-based propagation scrubs bearer tokens
- * and similar secrets consistently.
+ * <p>Ported from jumper's {@code TracingConfiguration} (lines 31-100) and extended with {@link
+ * #redactHeaderValue(String, String)} so that header-based propagation scrubs bearer tokens and
+ * similar secrets consistently.
  */
 @Slf4j
 public class SecretRedactor {
@@ -61,8 +61,8 @@ public class SecretRedactor {
   }
 
   /**
-   * @param extraQueryFilters additional regex patterns applied on top of
-   *     {@link #DEFAULT_QUERY_FILTERS}.
+   * @param extraQueryFilters additional regex patterns applied on top of {@link
+   *     #DEFAULT_QUERY_FILTERS}.
    */
   public SecretRedactor(List<String> extraQueryFilters) {
     List<String> all = new ArrayList<>(DEFAULT_QUERY_FILTERS);
