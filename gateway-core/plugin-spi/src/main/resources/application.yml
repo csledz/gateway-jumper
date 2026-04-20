@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+gateway:
+  plugin-spi:
+    enabled: true
+    # Absolute path to the directory from which *.jar plugins are hot-loaded.
+    # Leave unset (or point to a missing dir) for classpath-only operation.
+    directory: ${GATEWAY_PLUGIN_DIR:}
+    # Watch the directory and reload on changes. Set false to disable hot-swap.
+    watch: true
+    # Optional allow-list of plugin names to activate.
+    # Empty list means "every discovered plugin is enabled".
+    enabled-plugins:
+      - x-request-id
+
+logging:
+  level:
+    io.telekom.gateway.plugin_spi: INFO
