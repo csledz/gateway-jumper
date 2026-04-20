@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: 8080
+
+gateway:
+  validation:
+    max-request-bytes: 1048576
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      enabled: true
