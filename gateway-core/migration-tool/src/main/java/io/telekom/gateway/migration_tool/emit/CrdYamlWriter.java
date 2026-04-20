@@ -72,7 +72,13 @@ public final class CrdYamlWriter {
     m.put("apiVersion", r.getApiVersion());
     m.put("kind", r.getKind());
     m.put("metadata", r.getMetadata());
-    m.put("spec", r.getSpec());
+    if (r.getStringData() != null && !r.getStringData().isEmpty()) {
+      // k8s Secret: use stringData, drop spec (Secrets don't have spec).
+      m.put("type", "Opaque");
+      m.put("stringData", r.getStringData());
+    } else {
+      m.put("spec", r.getSpec());
+    }
     return m;
   }
 
