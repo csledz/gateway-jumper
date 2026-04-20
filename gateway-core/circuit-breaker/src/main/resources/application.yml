@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2023 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-core-circuit-breaker
+  cloud:
+    gateway:
+      default-filters: []
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+    circuitbreakers:
+      enabled: true
+    circuitbreakerevents:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# Default Resilience4j settings; per-route overrides are applied programmatically via
+# ResilienceRegistry#register(String, ResiliencePolicy).
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failure-rate-threshold: 50
+        sliding-window-size: 10
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 64
+        max-wait-duration: 0
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 100ms
+        exponential-backoff-multiplier: 2.0
+
+logging:
+  level:
+    io.telekom.gateway.circuit_breaker: INFO
+    io.github.resilience4j: INFO
