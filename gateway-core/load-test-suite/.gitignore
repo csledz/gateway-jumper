@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# Generated scenario reports - we keep the folder but not the contents.
+src/test/resources/reports/*
+!src/test/resources/reports/.gitkeep
+target/load-reports/
