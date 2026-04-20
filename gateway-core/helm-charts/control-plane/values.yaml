@@ -15,7 +15,13 @@ image:
   pull-policy: IfNotPresent
   pull-secrets: []
 
-replica-count: 2
+# Pinned to 1 until controller leader election lands (CRITIQUE F-008). Two
+# replicas without leader election would both reconcile the CRDs and race each
+# other's snapshot pushes to the data plane, corrupting runtime state.
+# To raise this: implement leader election via fabric8 LeaderElector (Lease in
+# the controller's namespace), update the ClusterRole to grant
+# coordination.k8s.io/leases, then bump this value and add a PodDisruptionBudget.
+replica-count: 1
 
 service-account:
   create: true
@@ -107,6 +113,9 @@ probes:
     timeout-seconds: 3
     failure-threshold: 3
 
+# Do not enable this until leader election is implemented (CRITIQUE F-008).
+# Multiple controller replicas without leadership will race their reconciliations
+# and corrupt the data-plane snapshot stream.
 hpa:
   enabled: false
   min-replicas: 2
@@ -114,8 +123,12 @@ hpa:
   target-cpu-utilization-percentage: 75
   target-memory-utilization-percentage: 80
 
+# Disabled by default until leader election lands. With replica-count=1 a
+# PodDisruptionBudget with minAvailable=1 would block node drains; once HA is
+# possible (leader elector + replica-count >= 2), flip enabled to true and use
+# max-unavailable=1 so rollouts can still proceed.
 pdb:
-  enabled: true
+  enabled: false
   min-available: 1
   # max-unavailable: ""
 
