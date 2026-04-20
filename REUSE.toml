@@ -20,3 +20,36 @@ path = "gateway-core/otel/src/main/resources/META-INF/spring/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
 SPDX-License-Identifier = "Apache-2.0"
+
+# Spring Boot auto-configuration import files — plain newline-separated class names
+# with no comment syntax, so inline SPDX headers are not possible.
+[[annotations]]
+path = "gateway-core/**/src/main/resources/META-INF/spring/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Java ServiceLoader registration files.
+[[annotations]]
+path = "gateway-core/**/src/main/resources/META-INF/services/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Test resources under gateway-core modules (schemas, properties, fixtures).
+[[annotations]]
+path = "gateway-core/**/src/test/resources/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Helm chart JSON schemas and Grafana dashboard JSON — JSON has no comment syntax
+# so REUSE annotations carry the license for these data files.
+[[annotations]]
+path = [
+  "gateway-core/helm-charts/**/values.schema.json",
+  "gateway-core/observability/src/main/resources/grafana/dashboards/**.json",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
+SPDX-License-Identifier = "Apache-2.0"
