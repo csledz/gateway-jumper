@@ -52,6 +52,12 @@ public class PluginLoader implements AutoCloseable {
 
   private final Path pluginDir;
   private final PluginRegistry registry;
+
+  /**
+   * Classloaders owned by the current plugin-directory generation. Ordering matters on reload: we
+   * swap the registry first and only close the previous generation afterwards, so the data plane
+   * never observes a plugin whose classloader has already been closed.
+   */
   private final CopyOnWriteArrayList<URLClassLoader> openClassLoaders =
       new CopyOnWriteArrayList<>();
 
@@ -66,6 +72,11 @@ public class PluginLoader implements AutoCloseable {
 
   /** Performs an initial scan and populates the registry. */
   public List<GatewayPlugin> loadAll() {
+    // Snapshot the previous generation before we build the new one. We close these loaders ONLY
+    // after the registry has been swapped so inflight requests do not hit a closed classloader.
+    List<URLClassLoader> previousLoaders = new ArrayList<>(openClassLoaders);
+    openClassLoaders.clear();
+
     List<GatewayPlugin> loaded = new ArrayList<>();
     loaded.addAll(loadFromClasspath());
     loaded.addAll(loadFromDirectory());
@@ -83,6 +94,10 @@ public class PluginLoader implements AutoCloseable {
       }
     }
     registry.replaceAll(byName.values());
+    // The registry no longer references any plugin instance loaded by the previous classloaders;
+    // safe to close them now. Closing before the swap would race with inflight requests.
+    closeLoaders(previousLoaders);
+
     List<GatewayPlugin> published = registry.all();
     log.info(
         "Loaded {} plugin(s): {}",
@@ -112,9 +127,9 @@ public class PluginLoader implements AutoCloseable {
       return result;
     }
 
-    // Close previous generation of plugin classloaders so hot-reload doesn't leak.
-    closeOpenClassLoaders();
-
+    // NOTE: do NOT close the previous generation here; loadAll() takes care of that AFTER the
+    // registry has been swapped to the new plugin set, so inflight requests never see a plugin
+    // backed by a closed classloader.
     List<URL> jarUrls = new ArrayList<>();
     try (Stream<Path> files = Files.list(pluginDir)) {
       files
@@ -218,15 +233,14 @@ public class PluginLoader implements AutoCloseable {
     }
   }
 
-  private void closeOpenClassLoaders() {
-    for (URLClassLoader cl : openClassLoaders) {
+  private void closeLoaders(List<URLClassLoader> loaders) {
+    for (URLClassLoader cl : loaders) {
       try {
         cl.close();
       } catch (IOException e) {
         log.debug("Failed to close previous plugin classloader", e);
       }
     }
-    openClassLoaders.clear();
   }
 
   @Override
@@ -242,6 +256,10 @@ public class PluginLoader implements AutoCloseable {
     if (watchThread != null) {
       watchThread.interrupt();
     }
-    closeOpenClassLoaders();
+    // Drop every plugin so the classloaders are not reachable from the registry, then close.
+    registry.replaceAll(List.of());
+    List<URLClassLoader> toClose = new ArrayList<>(openClassLoaders);
+    openClassLoaders.clear();
+    closeLoaders(toClose);
   }
 }
