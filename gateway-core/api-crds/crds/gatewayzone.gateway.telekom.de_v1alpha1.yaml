@@ -1,0 +1,132 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewayzones.gateway.telekom.de
+  labels:
+    app.kubernetes.io/name: gateway-core
+    app.kubernetes.io/component: api-crds
+spec:
+  group: gateway.telekom.de
+  scope: Namespaced
+  names:
+    kind: GatewayZone
+    listKind: GatewayZoneList
+    plural: gatewayzones
+    singular: gatewayzone
+    shortNames:
+      - gwz
+      - gwzone
+    categories:
+      - gateway
+      - gateway-core
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            GatewayZone represents a single logical zone in the gateway mesh (local
+            cluster, failover partner, internet-facing edge, ...). The stargate URL
+            and realm are used to mint mesh JWTs; health is published to Redis.
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - name
+                - realm
+                - stargate
+                - issuerUrl
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                  description: Stable zone identifier (e.g. 'space', 'canis', 'aries').
+                realm:
+                  type: string
+                  minLength: 1
+                  description: Keycloak realm used to issue mesh JWTs for this zone.
+                stargate:
+                  type: string
+                  pattern: '^https?://.+'
+                  description: Public edge URL of the stargate serving this zone.
+                internetFacing:
+                  type: boolean
+                  default: false
+                  description: True when this zone is reachable from the public internet.
+                issuerUrl:
+                  type: string
+                  pattern: '^https?://.+'
+                  description: JWT issuer URL (typically stargate + /auth/realms/<realm>).
+              x-kubernetes-validations:
+                - rule: "self.stargate.startsWith('https://') || !self.internetFacing"
+                  message: "internet-facing zones must use https for stargate"
+            status:
+              type: object
+              description: Last observed health data for the zone.
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                healthy:
+                  type: boolean
+                  description: Whether the zone is currently considered healthy.
+                lastSeen:
+                  type: string
+                  format: date-time
+                  description: Timestamp of the last successful health signal.
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      additionalPrinterColumns:
+        - name: Zone
+          type: string
+          jsonPath: .spec.name
+        - name: Realm
+          type: string
+          jsonPath: .spec.realm
+        - name: Internet-Facing
+          type: boolean
+          jsonPath: .spec.internetFacing
+        - name: Healthy
+          type: boolean
+          jsonPath: .status.healthy
+        - name: Last-Seen
+          type: date
+          jsonPath: .status.lastSeen
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

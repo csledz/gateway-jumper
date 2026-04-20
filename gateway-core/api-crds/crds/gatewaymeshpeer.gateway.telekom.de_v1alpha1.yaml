@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewaymeshpeers.gateway.telekom.de
+  labels:
+    app.kubernetes.io/name: gateway-core
+    app.kubernetes.io/component: api-crds
+spec:
+  group: gateway.telekom.de
+  scope: Namespaced
+  names:
+    kind: GatewayMeshPeer
+    listKind: GatewayMeshPeerList
+    plural: gatewaymeshpeers
+    singular: gatewaymeshpeer
+    shortNames:
+      - gwmp
+      - gwpeer
+    categories:
+      - gateway
+      - gateway-core
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            GatewayMeshPeer wires the local zone to another GatewayZone. It holds the
+            endpoint used for cross-zone failover calls plus the client-credentials
+            reference used to obtain mesh JWTs from the peer's token endpoint.
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - peerZone
+                - endpoint
+                - tokenEndpoint
+                - clientCredentialsRef
+              properties:
+                peerZone:
+                  type: string
+                  minLength: 1
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                  description: Name of the peer GatewayZone this peer targets.
+                endpoint:
+                  type: string
+                  pattern: '^https?://.+'
+                  description: HTTPS endpoint used for cross-zone requests.
+                mtls:
+                  type: boolean
+                  default: false
+                  description: Whether mTLS is required for this peer link.
+                tokenEndpoint:
+                  type: string
+                  pattern: '^https?://.+'
+                  description: OAuth2 token endpoint used to mint mesh tokens.
+                clientCredentialsRef:
+                  type: object
+                  description: Reference to a GatewayCredential (type=oauth2-client).
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                    namespace:
+                      type: string
+              x-kubernetes-validations:
+                - rule: "self.endpoint.startsWith('https://') || !self.mtls"
+                  message: "mtls peers must use https endpoints"
+                - rule: "self.tokenEndpoint.startsWith('https://')"
+                  message: "tokenEndpoint must use https"
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                reachable:
+                  type: boolean
+                lastSeen:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      additionalPrinterColumns:
+        - name: Peer-Zone
+          type: string
+          jsonPath: .spec.peerZone
+        - name: Endpoint
+          type: string
+          jsonPath: .spec.endpoint
+        - name: mTLS
+          type: boolean
+          jsonPath: .spec.mtls
+        - name: Reachable
+          type: boolean
+          jsonPath: .status.reachable
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewayconsumers.gateway.telekom.de
+  labels:
+    app.kubernetes.io/name: gateway-core
+    app.kubernetes.io/component: api-crds
+spec:
+  group: gateway.telekom.de
+  scope: Namespaced
+  names:
+    kind: GatewayConsumer
+    listKind: GatewayConsumerList
+    plural: gatewayconsumers
+    singular: gatewayconsumer
+    shortNames:
+      - gwc
+      - gwconsumer
+    categories:
+      - gateway
+      - gateway-core
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            GatewayConsumer represents an authenticated client (application, team or
+            partner) that may be allowed to call GatewayRoutes through credentials.
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - clientId
+              properties:
+                clientId:
+                  type: string
+                  minLength: 1
+                  maxLength: 253
+                  description: Stable client identifier used in JWT 'azp' / 'client_id'.
+                  pattern: '^[a-zA-Z0-9][a-zA-Z0-9._:-]*$'
+                displayName:
+                  type: string
+                  maxLength: 253
+                  description: Human-readable name for dashboards and logs.
+                labels:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Free-form labels (team, environment, tier ...).
+                credentialRefs:
+                  type: array
+                  description: GatewayCredential resources associated with this consumer.
+                  items:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                      namespace:
+                        type: string
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      additionalPrinterColumns:
+        - name: Client-ID
+          type: string
+          jsonPath: .spec.clientId
+        - name: Display-Name
+          type: string
+          jsonPath: .spec.displayName
+        - name: Credentials
+          type: string
+          description: Names of credentials referenced
+          jsonPath: .spec.credentialRefs[*].name
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

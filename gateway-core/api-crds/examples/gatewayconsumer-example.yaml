@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayConsumer
+metadata:
+  name: example-consumer
+  namespace: gateway-core
+spec:
+  clientId: orders-app-prod
+  displayName: Orders App (prod)
+  labels:
+    team: checkout
+    environment: prod
+    tier: gold
+  credentialRefs:
+    - name: example-credential-jwt

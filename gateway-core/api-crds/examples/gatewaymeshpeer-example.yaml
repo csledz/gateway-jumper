@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayMeshPeer
+metadata:
+  name: example-peer-canis
+  namespace: gateway-core
+spec:
+  peerZone: canis
+  endpoint: https://stargate-canis.test.dhei.telekom.de
+  mtls: true
+  tokenEndpoint: https://stargate-canis.test.dhei.telekom.de/auth/realms/default/protocol/openid-connect/token
+  clientCredentialsRef:
+    name: example-credential-mesh-client

@@ -1,0 +1,216 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewayroutes.gateway.telekom.de
+  labels:
+    app.kubernetes.io/name: gateway-core
+    app.kubernetes.io/component: api-crds
+spec:
+  group: gateway.telekom.de
+  scope: Namespaced
+  names:
+    kind: GatewayRoute
+    listKind: GatewayRouteList
+    plural: gatewayroutes
+    singular: gatewayroute
+    shortNames:
+      - gwr
+      - gwroute
+    categories:
+      - gateway
+      - gateway-core
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            GatewayRoute defines how incoming requests are matched and forwarded to an
+            upstream service. It is the Kong-free equivalent of a Kong Route/Service pair
+            used by the gateway-core controller.
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - hosts
+                - paths
+                - upstreamRef
+              properties:
+                hosts:
+                  type: array
+                  minItems: 1
+                  description: Host names matched by this route (SNI / Host header).
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 253
+                    pattern: '^[a-zA-Z0-9]([-a-zA-Z0-9.]*[a-zA-Z0-9])?$'
+                paths:
+                  type: array
+                  minItems: 1
+                  description: Path prefixes (or exact paths) served by the route.
+                  items:
+                    type: string
+                    minLength: 1
+                    pattern: '^/.*$'
+                methods:
+                  type: array
+                  description: HTTP methods this route accepts. Empty means ANY.
+                  items:
+                    type: string
+                    enum:
+                      - GET
+                      - POST
+                      - PUT
+                      - DELETE
+                      - PATCH
+                      - HEAD
+                      - OPTIONS
+                      - TRACE
+                upstreamRef:
+                  type: object
+                  description: Reference to the upstream service (k8s Service or external URL).
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                    namespace:
+                      type: string
+                    port:
+                      type: integer
+                      minimum: 1
+                      maximum: 65535
+                    scheme:
+                      type: string
+                      enum: [http, https]
+                      default: https
+                    url:
+                      type: string
+                      description: External URL (used when name refers to an external upstream).
+                      pattern: '^https?://.+'
+                timeouts:
+                  type: object
+                  description: Per-route timeout overrides.
+                  properties:
+                    connect:
+                      type: string
+                      pattern: '^[0-9]+(ms|s|m)$'
+                      default: 10s
+                    read:
+                      type: string
+                      pattern: '^[0-9]+(ms|s|m)$'
+                      default: 60s
+                    write:
+                      type: string
+                      pattern: '^[0-9]+(ms|s|m)$'
+                      default: 60s
+                retries:
+                  type: object
+                  description: Retry policy applied to failing upstream calls.
+                  properties:
+                    attempts:
+                      type: integer
+                      minimum: 0
+                      maximum: 10
+                      default: 1
+                    statuses:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - BAD_GATEWAY
+                          - SERVICE_UNAVAILABLE
+                          - GATEWAY_TIMEOUT
+                          - INTERNAL_SERVER_ERROR
+                    methods:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - GET
+                          - POST
+                          - PUT
+                          - DELETE
+                          - PATCH
+                          - HEAD
+                          - OPTIONS
+                policyRefs:
+                  type: array
+                  description: References to GatewayPolicy resources applied to this route.
+                  items:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                      namespace:
+                        type: string
+                zone:
+                  type: string
+                  description: Zone name this route belongs to; matches GatewayZone.spec.name.
+                  minLength: 1
+            status:
+              type: object
+              description: Observed status of the GatewayRoute reconciliation.
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      additionalPrinterColumns:
+        - name: Host
+          type: string
+          description: First host the route matches
+          jsonPath: .spec.hosts[0]
+        - name: Path
+          type: string
+          description: First path the route matches
+          jsonPath: .spec.paths[0]
+        - name: Upstream
+          type: string
+          description: Upstream service reference
+          jsonPath: .spec.upstreamRef.name
+        - name: Zone
+          type: string
+          jsonPath: .spec.zone
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayPolicy
+metadata:
+  name: example-ratelimit
+  namespace: gateway-core
+spec:
+  type: ratelimit
+  settings:
+    ratelimit:
+      limit: 100
+      window: 1m
+      key: consumer
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayPolicy
+metadata:
+  name: example-cors
+  namespace: gateway-core
+spec:
+  type: cors
+  settings:
+    cors:
+      allowedOrigins:
+        - https://portal.telekom.de
+      allowedMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowedHeaders:
+        - Authorization
+        - Content-Type
+      allowCredentials: true
+      maxAge: 1h
