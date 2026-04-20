@@ -156,13 +156,18 @@ spec:
                       properties:
                         engine:
                           type: string
-                          enum: [opa, cel]
+                          # Matches the evaluators shipped by gateway-core/policy-engine:
+                          #   spel — default in-process Spring Expression Language evaluator
+                          #   rego — Rego policies (requires the rego profile)
+                          enum: [spel, rego]
+                          default: spel
                         url:
                           type: string
                           pattern: '^https?://.+'
+                          description: Optional out-of-process policy-eval endpoint (reserved).
                         policy:
                           type: string
-                          description: Inline policy (rego or CEL expression).
+                          description: Inline policy expression (SpEL) or Rego module text.
                         failOpen:
                           type: boolean
                           default: false
