@@ -1,0 +1,36 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "control-plane.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "control-plane.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "control-plane.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+    - name: admin
+      port: {{ .Values.service.ports.admin }}
+      targetPort: admin
+      protocol: TCP
+    - name: management
+      port: {{ .Values.service.ports.management }}
+      targetPort: management
+      protocol: TCP
+    {{- $admin := index .Values "admin-status-api" }}
+    {{- if $admin.enabled }}
+    - name: admin-status
+      port: {{ $admin.port }}
+      targetPort: admin-status
+      protocol: TCP
+    {{- end }}

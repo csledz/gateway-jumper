@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telekom.de/gateway-core/control-plane/values.schema.json",
+  "title": "gateway-core/control-plane values",
+  "description": "Schema for the control-plane Helm chart.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name-override": { "type": "string" },
+    "fullname-override": { "type": "string" },
+    "image": {
+      "type": "object",
+      "required": ["repository", "pull-policy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pull-policy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pull-secrets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "replica-count": { "type": "integer", "minimum": 0 },
+    "service-account": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "extra-rules": { "type": "array" }
+      }
+    },
+    "pod": {
+      "type": "object",
+      "properties": {
+        "annotations": { "type": "object" },
+        "labels": { "type": "object" },
+        "security-context": { "type": "object" }
+      }
+    },
+    "container": {
+      "type": "object",
+      "properties": {
+        "security-context": { "type": "object" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "ports": {
+          "type": "object",
+          "properties": {
+            "http": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "admin": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "management": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "class-name": { "type": "string" },
+        "annotations": { "type": "object" },
+        "hosts": { "type": "array" },
+        "tls": { "type": "array" }
+      }
+    },
+    "admin-status-api": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "pull-policy": { "type": "string" }
+          }
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "resources": { "type": "object" }
+      }
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "watch-namespaces": { "type": "array", "items": { "type": "string" } },
+        "leader-election": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "lease-name": { "type": "string" }
+          }
+        },
+        "reconcile-interval": { "type": "string" },
+        "log-level": { "type": "string", "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] }
+      }
+    },
+    "resources": { "type": "object" },
+    "probes": { "type": "object" },
+    "hpa": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "min-replicas": { "type": "integer", "minimum": 1 },
+        "max-replicas": { "type": "integer", "minimum": 1 },
+        "target-cpu-utilization-percentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 },
+        "target-memory-utilization-percentage": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 }
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "min-available": { "type": ["integer", "string"] },
+        "max-unavailable": { "type": ["integer", "string"] }
+      }
+    },
+    "service-monitor": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "interval": { "type": "string" },
+        "scrape-timeout": { "type": "string" },
+        "path": { "type": "string" },
+        "port": { "type": "string" },
+        "labels": { "type": "object" },
+        "relabelings": { "type": "array" },
+        "metric-relabelings": { "type": "array" }
+      }
+    },
+    "network-policy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingress": { "type": "array" },
+        "egress": { "type": "array" }
+      }
+    },
+    "node-selector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "extra-env": { "type": "array" },
+    "extra-env-from": { "type": "array" },
+    "extra-volumes": { "type": "array" },
+    "extra-volume-mounts": { "type": "array" }
+  }
+}

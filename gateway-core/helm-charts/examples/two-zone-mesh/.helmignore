@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+.DS_Store
+.git/
+.gitignore
+.vscode/
+.idea/
+# NOTE: do NOT ignore *.tgz — Helm 4 relies on the charts/ tarballs to
+# resolve local subcharts; *.tgz in .helmignore breaks umbrella rendering.
+*.bak
+*.swp
+.project
+.settings/
+OWNERS
+README.md.gotmpl

@@ -1,0 +1,158 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Default values for gateway-core/control-plane.
+# Keys at the chart boundary are kebab-case; the chart maps them to
+# camelCase when rendering Spring Boot configuration.
+
+name-override: ""
+fullname-override: ""
+
+image:
+  repository: mtr.devops.telekom.de/tardis-internal/gateway/control-plane
+  tag: ""   # falls back to .Chart.AppVersion
+  pull-policy: IfNotPresent
+  pull-secrets: []
+
+replica-count: 2
+
+service-account:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+  # Extra API groups the controller should be allowed to watch. The chart always
+  # grants read-only access to the built-in gateway-core CRDs.
+  extra-rules: []
+
+pod:
+  annotations: {}
+  labels: {}
+  security-context:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
+container:
+  security-context:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+service:
+  type: ClusterIP
+  ports:
+    http: 8080
+    admin: 8081
+    management: 8082
+
+ingress:
+  enabled: false
+  class-name: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+admin-status-api:
+  enabled: true
+  # Admin-status-api runs as a sidecar inside the control-plane pod.
+  image:
+    repository: mtr.devops.telekom.de/tardis-internal/gateway/admin-status-api
+    tag: ""
+    pull-policy: IfNotPresent
+  port: 8089
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+controller:
+  # Namespaces the controller should watch. Empty list = cluster-wide.
+  watch-namespaces: []
+  leader-election:
+    enabled: true
+    lease-name: gateway-core-control-plane
+  reconcile-interval: 30s
+  log-level: INFO
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /actuator/health/liveness
+    initial-delay-seconds: 30
+    period-seconds: 10
+    timeout-seconds: 3
+    failure-threshold: 3
+  readiness:
+    path: /actuator/health/readiness
+    initial-delay-seconds: 10
+    period-seconds: 5
+    timeout-seconds: 3
+    failure-threshold: 3
+
+hpa:
+  enabled: false
+  min-replicas: 2
+  max-replicas: 5
+  target-cpu-utilization-percentage: 75
+  target-memory-utilization-percentage: 80
+
+pdb:
+  enabled: true
+  min-available: 1
+  # max-unavailable: ""
+
+service-monitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  scrape-timeout: 10s
+  path: /actuator/prometheus
+  port: management
+  labels: {}
+  relabelings: []
+  metric-relabelings: []
+
+network-policy:
+  enabled: false
+  # Ingress rules: who can talk to the control plane. Empty list = deny all
+  # except pods in the same namespace.
+  ingress:
+    - from:
+        - pod-selector:
+            match-labels:
+              app.kubernetes.io/component: data-plane
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 8081
+          protocol: TCP
+  # Egress rules: what the control plane may reach. Empty = allow-all.
+  egress: []
+
+node-selector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables passed to the controller container.
+extra-env: []
+extra-env-from: []
+extra-volumes: []
+extra-volume-mounts: []

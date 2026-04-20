@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+.DS_Store
+.git/
+.gitignore
+.vscode/
+.idea/
+# NOTE: do NOT ignore *.tgz — Helm needs it for packaged subcharts.
+*.bak
+*.swp
+.project
+.settings/
+OWNERS
+README.md.gotmpl

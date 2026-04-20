@@ -1,0 +1,20 @@
+{{/*
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+*/}}
+gateway-core control-plane installed as {{ include "control-plane.fullname" . }}
+in namespace {{ .Release.Namespace }}.
+
+Admin-status-api: {{ (index .Values "admin-status-api").enabled | ternary "enabled" "disabled" }}
+HPA: {{ .Values.hpa.enabled | ternary "enabled" "disabled" }}
+PDB: {{ .Values.pdb.enabled | ternary "enabled" "disabled" }}
+ServiceMonitor: {{ (index .Values "service-monitor").enabled | ternary "enabled" "disabled" }}
+NetworkPolicy: {{ (index .Values "network-policy").enabled | ternary "enabled" "disabled" }}
+
+Discover the controller via:
+  kubectl -n {{ .Release.Namespace }} get deployment {{ include "control-plane.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "control-plane.fullname" . }}
+
+Point your data-plane release at:
+  control-plane.admin-status-url=http://{{ include "control-plane.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ (index .Values "admin-status-api").port }}
