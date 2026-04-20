@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: ${ADMIN_API_PORT:8091}
+  shutdown: GRACEFUL
+
+spring:
+  application:
+    name: ${ADMIN_API_NAME:gateway-core-admin-status-api}
+  main:
+    web-application-type: reactive
+
+springdoc:
+  swagger-ui:
+    path: /admin/docs
+    disable-swagger-default-url: true
+  api-docs:
+    path: /v3/api-docs
+    version: openapi_3_1
+
+admin:
+  security:
+    # basic (dev) or mtls (prod)
+    mode: ${ADMIN_SECURITY_MODE:basic}
+    user: ${ADMIN_USER:admin}
+    password: ${ADMIN_PASSWORD:admin}
+
+logging:
+  level:
+    io.telekom.gateway.admin_status_api: INFO
