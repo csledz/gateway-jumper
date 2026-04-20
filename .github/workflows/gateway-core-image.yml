@@ -1,0 +1,180 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Gateway Core Image
+
+# Builds and pushes the distroless controller + proxy images on:
+#   * pushes of a `v*` tag on any branch (release),
+#   * manual `workflow_dispatch` with an explicit tag (useful for hotfix /
+#     semantic-release trigger),
+#   * pull requests touching the Dockerfiles or this workflow (build-only,
+#     push is skipped).
+#
+# Required repository configuration (mirrors the jumper pipeline):
+#   Variables: REGISTRY_HOST, REGISTRY_REPO, REGISTRY_USER
+#   Secrets:   REGISTRY_TOKEN
+# Optional:
+#   Secrets:   COSIGN_PASSWORD, COSIGN_PRIVATE_KEY, COSIGN_PUBLIC_KEY
+#              (signing is enabled only when all three are present)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'gateway-core/docker/**'
+      - '.github/workflows/gateway-core-image.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to publish (e.g. v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-push:
+    name: Build & push ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    # `contents: write` is required by the Trivy step to upload SBOM results
+    # to the GitHub dependency graph on non-PR events.
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: controller
+            dockerfile: gateway-core/docker/controller/Dockerfile
+          - component: proxy
+            dockerfile: gateway-core/docker/proxy/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Inject slug vars
+        uses: rlespinasse/github-slug-action@e6f261660910b273384c5c42b17a0217881b217a #v5.6.0
+
+      - name: Determine tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TAG="pr-${{ github.event.pull_request.number }}-${GITHUB_HEAD_REF_SLUG}"
+          elif [[ "${GITHUB_REF_POINT_SLUG:-}" == "main" ]]; then
+            TAG="latest"
+          else
+            TAG="${GITHUB_REF_POINT_SLUG:-unknown}"
+          fi
+          echo "Image tag will be: ${TAG}"
+          echo "image-tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Determine image labels
+        id: image-labels
+        # Apply Quay expiry to non-main, non-tag builds; main and release tags
+        # stay permanent.
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "labels=" >> "${GITHUB_OUTPUT}"
+          else
+            echo "labels=quay.expires-after=60d" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Decide whether to push
+        id: push-decision
+        # Never push from PRs (no registry credentials in forks / untrusted).
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "push=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "push=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Login to registry
+        if: steps.push-decision.outputs.push == 'true'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 #v4.1.0
+        with:
+          registry: ${{ vars.REGISTRY_HOST }}
+          username: ${{ vars.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd #v4.0.0
+
+      - name: Build and push ${{ matrix.component }}
+        id: build-push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f #v7.1.0
+        env:
+          DOCKER_BUILD_SUMMARY: false
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: ${{ vars.REGISTRY_HOST }}${{ vars.REGISTRY_REPO }}/${{ matrix.component }}:${{ steps.tag.outputs.image-tag }}
+          cache-from: type=registry,ref=${{ vars.REGISTRY_HOST }}${{ vars.REGISTRY_REPO }}/${{ matrix.component }}:latest
+          cache-to: type=inline
+          provenance: false
+          labels: ${{ steps.image-labels.outputs.labels }}
+          push: ${{ steps.push-decision.outputs.push == 'true' }}
+          platforms: linux/amd64
+
+      - name: Install Cosign
+        if: steps.push-decision.outputs.push == 'true'
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 #v4.1.1
+        with:
+          cosign-release: 'v2.5.3'
+
+      - name: Sign image using cosign
+        id: cosign-sign
+        # Only sign when the signing material is available. This keeps the
+        # workflow usable in forks and in setups where cosign is not
+        # configured yet.
+        if: >-
+          steps.push-decision.outputs.push == 'true' &&
+          env.COSIGN_PRIVATE_KEY != '' &&
+          env.COSIGN_PASSWORD != ''
+        env:
+          TAG: ${{ steps.tag.outputs.image-tag }}
+          DIGEST: ${{ steps.build-push.outputs.digest }}
+          REGISTRY: ${{ vars.REGISTRY_HOST }}
+          REGISTRY_REPO: ${{ vars.REGISTRY_REPO }}
+          REGISTRY_USER: ${{ vars.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_TOKEN }}
+          COMPONENT: ${{ matrix.component }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}${REGISTRY_REPO}/${COMPONENT}:${TAG}@${DIGEST}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          cosign login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
+          cosign sign --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "${image}"
+
+      - name: Verify signature
+        if: steps.cosign-sign.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.cosign-sign.outputs.image }}
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        run: |
+          cosign verify --insecure-ignore-tlog=true --key env://COSIGN_PUBLIC_KEY "${IMAGE}"
+
+      - name: Run Trivy vulnerability scanner
+        if: steps.push-decision.outputs.push == 'true'
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 #v0.35.0
+        env:
+          TRIVY_USERNAME: ${{ vars.REGISTRY_USER }}
+          TRIVY_PASSWORD: ${{ secrets.REGISTRY_TOKEN }}
+        with:
+          image-ref: '${{ vars.REGISTRY_HOST }}${{ vars.REGISTRY_REPO }}/${{ matrix.component }}@${{ steps.build-push.outputs.digest }}'
+          exit-code: '0'
+          vuln-type: os
+          format: github
+          output: dependency-results-${{ matrix.component }}.sbom.json
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
