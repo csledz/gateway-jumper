@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+spring:
+  application:
+    name: gateway-core-observability-test
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: echo-route
+              uri: http://localhost:${wiremock.port:0}
+              predicates:
+                - Path=/echo/**
+            - id: slow-route
+              uri: http://localhost:${wiremock.port:0}
+              predicates:
+                - Path=/slow/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health, info
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      type: B3_MULTI
+
+gateway:
+  observability:
+    zone: test-zone
+    logging:
+      # Keep tests fast and quiet — don't reconfigure Logback globally.
+      json-enabled: false
+    tracing:
+      otlp:
+        enabled: false
+      filter-param-list: X-Amz-.*,sig,access_token,password,client_secret
+
+logging:
+  level:
+    io.telekom.gateway.observability: DEBUG
