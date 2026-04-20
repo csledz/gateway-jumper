@@ -22,4 +22,9 @@ public record AuthContext(
     BASIC,
     INTROSPECTION
   }
+
+  /** Copy with a different traceId (used when a cache hit reuses an earlier context). */
+  public AuthContext withTraceId(String newTraceId) {
+    return new AuthContext(principalId, issuer, claims, scopes, type, newTraceId);
+  }
 }
