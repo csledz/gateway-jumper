@@ -17,5 +17,18 @@ import reactor.core.publisher.Mono;
  */
 public interface OutboundTokenStrategy {
 
+  /**
+   * Exchange attribute where strategies publish the outbound {@code Authorization} header value.
+   * The proxy module's downstream forwarder reads this attribute and applies it to the upstream
+   * request just before dispatch, so strategies never have to mutate the incoming request.
+   */
+  String OUTBOUND_AUTH_HEADER_ATTR = "io.telekom.gateway.outboundAuthHeader";
+
+  /**
+   * Exchange attribute where Mesh strategy publishes the original consumer token so the proxy
+   * forwards it in {@code X-Consumer-Token} to the peer.
+   */
+  String CONSUMER_TOKEN_ATTR = "io.telekom.gateway.consumerToken";
+
   Mono<Void> apply(ServerWebExchange exchange, OutboundAuthPolicy policy);
 }
