@@ -88,3 +88,10 @@ nb-configuration.xml
 ##############################
 .DS_Store
 /keypair/
+
+##############################
+## Hydra / test IdP secrets
+##############################
+# Runtime-generated OAuth2 client secrets; never commit.
+.secrets/
+docker-support/hydra/secrets/
