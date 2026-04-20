@@ -9,8 +9,10 @@ services:
     image: jaegertracing/jaeger:2.3.0
     ports:
       - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+      # OTLP 4317/4318 are intentionally NOT exposed on the host: the
+      # otel-collector fronts them and routes traces into Jaeger via the
+      # internal docker network (jaeger:4317). Services on the host use
+      # localhost:4319 (collector OTLP gRPC) / localhost:4320 (OTLP HTTP).
       - "9411:9411"
     volumes:
       - "./docker-support/jaeger.yml:/etc/jaeger/config.yml"
@@ -19,6 +21,21 @@ services:
       - jaeger
     links:
       - prometheus
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.150.1
+    command: [ "--config=/etc/otel/config.yaml" ]
+    volumes:
+      - "./docker-support/otel/collector.yaml:/etc/otel/config.yaml:ro"
+    ports:
+      # Collector OTLP endpoints on host — services point here, not at Jaeger.
+      - "4319:4317"
+      - "4320:4318"
+      - "13133:13133"
+    depends_on:
+      - jaeger
+    networks:
+      - jaeger
 
   prometheus:
     image: prom/prometheus:v3.1.0
