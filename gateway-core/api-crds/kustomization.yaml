@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: gateway-core
+      app.kubernetes.io/component: api-crds
+    includeSelectors: false
+
+resources:
+  - crds/gatewayroute.gateway.telekom.de_v1alpha1.yaml
+  - crds/gatewayconsumer.gateway.telekom.de_v1alpha1.yaml
+  - crds/gatewaycredential.gateway.telekom.de_v1alpha1.yaml
+  - crds/gatewayzone.gateway.telekom.de_v1alpha1.yaml
+  - crds/gatewaymeshpeer.gateway.telekom.de_v1alpha1.yaml
+  - crds/gatewaypolicy.gateway.telekom.de_v1alpha1.yaml

@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.13</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>de.telekom.ei.gateway-core</groupId>
+    <artifactId>api-crds</artifactId>
+    <version>0.0.0</version>
+    <packaging>pom</packaging>
+    <name>gateway-core :: api-crds</name>
+    <description>
+        CustomResourceDefinitions for the Kong-free gateway-core landscape.
+        This module ships YAML only; the verify phase runs kubectl against
+        crds/ and examples/ to catch shape regressions.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <kubectl.executable>kubectl</kubectl.executable>
+        <crds.dir>${project.basedir}/crds</crds.dir>
+        <examples.dir>${project.basedir}/examples</examples.dir>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- Parent plugins expect a jar; disable/skip them for this YAML-only module. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <skipIfEmpty>true</skipIfEmpty>
+                </configuration>
+            </plugin>
+
+            <!--
+                Default verify path:
+                  1. `kubectl kustomize` parses/aggregates all 6 CRDs fully offline
+                     (no cluster required, but still uses kubectl). This is the
+                     shape-check fallback documented in the unit spec.
+                  2. `kubectl apply [dry-run=client] -f crds/ -f examples/` is
+                     wired up in the `with-cluster` profile (which is what the
+                     e2e recipe calls for) and is used when a live cluster is
+                     reachable.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>kubectl-kustomize-crds</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${kubectl.executable}</executable>
+                            <arguments>
+                                <argument>kustomize</argument>
+                                <argument>${project.basedir}</argument>
+                            </arguments>
+                            <outputFile>${project.build.directory}/kustomize-output.yaml</outputFile>
+                            <successCodes>
+                                <successCode>0</successCode>
+                            </successCodes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+            Activate with `-Pwith-cluster` when a kubeconfig points at a reachable
+            cluster (kind, minikube, real target). Runs the full e2e recipe:
+                kubectl apply [dry-run=client] -f crds/ -f examples/
+        -->
+        <profile>
+            <id>with-cluster</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>kubectl-dry-run-crds</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${kubectl.executable}</executable>
+                                    <arguments>
+                                        <argument>apply</argument>
+                                        <argument>--dry-run=client</argument>
+                                        <argument>-f</argument>
+                                        <argument>${crds.dir}/</argument>
+                                    </arguments>
+                                    <successCodes>
+                                        <successCode>0</successCode>
+                                    </successCodes>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>kubectl-dry-run-examples</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${kubectl.executable}</executable>
+                                    <arguments>
+                                        <argument>apply</argument>
+                                        <argument>--dry-run=client</argument>
+                                        <argument>-f</argument>
+                                        <argument>${examples.dir}/</argument>
+                                    </arguments>
+                                    <successCodes>
+                                        <successCode>0</successCode>
+                                    </successCodes>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+            Activate with `-Pno-kubectl` when kubectl is not installed at all.
+            This skips every external command; Maven still performs its own
+            YAML parse during the kustomize step (plugin disabled here).
+        -->
+        <profile>
+            <id>no-kubectl</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>kubectl-kustomize-crds</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>

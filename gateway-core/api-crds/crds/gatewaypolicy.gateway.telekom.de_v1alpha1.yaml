@@ -1,0 +1,214 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gatewaypolicies.gateway.telekom.de
+  labels:
+    app.kubernetes.io/name: gateway-core
+    app.kubernetes.io/component: api-crds
+spec:
+  group: gateway.telekom.de
+  scope: Namespaced
+  names:
+    kind: GatewayPolicy
+    listKind: GatewayPolicyList
+    plural: gatewaypolicies
+    singular: gatewaypolicy
+    shortNames:
+      - gwp
+      - gwpolicy
+    categories:
+      - gateway
+      - gateway-core
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            GatewayPolicy is a reusable policy attached to one or more GatewayRoutes.
+            The type field selects which shape of 'settings' is required.
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - type
+                - settings
+              properties:
+                type:
+                  type: string
+                  enum:
+                    - ratelimit
+                    - cors
+                    - requestValidation
+                    - circuitBreaker
+                    - policyEngine
+                  description: Selects which settings shape is valid.
+                settings:
+                  type: object
+                  description: |
+                    Type-specific settings. Exactly one of the fields below must be
+                    present, matching spec.type.
+                  properties:
+                    ratelimit:
+                      type: object
+                      required:
+                        - limit
+                        - window
+                      properties:
+                        limit:
+                          type: integer
+                          minimum: 1
+                        window:
+                          type: string
+                          pattern: '^[0-9]+(ms|s|m|h)$'
+                        key:
+                          type: string
+                          enum: [consumer, ip, header]
+                          default: consumer
+                        headerName:
+                          type: string
+                    cors:
+                      type: object
+                      properties:
+                        allowedOrigins:
+                          type: array
+                          items:
+                            type: string
+                            minLength: 1
+                        allowedMethods:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                              - GET
+                              - POST
+                              - PUT
+                              - DELETE
+                              - PATCH
+                              - HEAD
+                              - OPTIONS
+                        allowedHeaders:
+                          type: array
+                          items:
+                            type: string
+                        exposedHeaders:
+                          type: array
+                          items:
+                            type: string
+                        allowCredentials:
+                          type: boolean
+                          default: false
+                        maxAge:
+                          type: string
+                          pattern: '^[0-9]+(s|m|h)$'
+                    requestValidation:
+                      type: object
+                      properties:
+                        maxBodySize:
+                          type: string
+                          pattern: '^[0-9]+(B|KB|MB)$'
+                        allowedContentTypes:
+                          type: array
+                          items:
+                            type: string
+                        schemaRef:
+                          type: object
+                          required: [name]
+                          properties:
+                            name:
+                              type: string
+                              minLength: 1
+                            namespace:
+                              type: string
+                    circuitBreaker:
+                      type: object
+                      required:
+                        - failureThreshold
+                      properties:
+                        failureThreshold:
+                          type: integer
+                          minimum: 1
+                        resetTimeout:
+                          type: string
+                          pattern: '^[0-9]+(ms|s|m)$'
+                          default: 30s
+                        halfOpenRequests:
+                          type: integer
+                          minimum: 1
+                          default: 1
+                    policyEngine:
+                      type: object
+                      required:
+                        - engine
+                      properties:
+                        engine:
+                          type: string
+                          enum: [opa, cel]
+                        url:
+                          type: string
+                          pattern: '^https?://.+'
+                        policy:
+                          type: string
+                          description: Inline policy (rego or CEL expression).
+                        failOpen:
+                          type: boolean
+                          default: false
+              x-kubernetes-validations:
+                - rule: "self.type != 'ratelimit' || has(self.settings.ratelimit)"
+                  message: "type=ratelimit requires settings.ratelimit"
+                - rule: "self.type != 'cors' || has(self.settings.cors)"
+                  message: "type=cors requires settings.cors"
+                - rule: "self.type != 'requestValidation' || has(self.settings.requestValidation)"
+                  message: "type=requestValidation requires settings.requestValidation"
+                - rule: "self.type != 'circuitBreaker' || has(self.settings.circuitBreaker)"
+                  message: "type=circuitBreaker requires settings.circuitBreaker"
+                - rule: "self.type != 'policyEngine' || has(self.settings.policyEngine)"
+                  message: "type=policyEngine requires settings.policyEngine"
+            status:
+              type: object
+              properties:
+                observedGeneration:
+                  type: integer
+                  format: int64
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

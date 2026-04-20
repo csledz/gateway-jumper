@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayRoute
+metadata:
+  name: example-orders
+  namespace: gateway-core
+spec:
+  hosts:
+    - api.example.telekom.de
+  paths:
+    - /orders
+    - /orders/v1
+  methods:
+    - GET
+    - POST
+  upstreamRef:
+    name: orders-service
+    namespace: orders
+    port: 8080
+    scheme: https
+  timeouts:
+    connect: 10s
+    read: 60s
+    write: 60s
+  retries:
+    attempts: 1
+    statuses:
+      - BAD_GATEWAY
+      - SERVICE_UNAVAILABLE
+      - GATEWAY_TIMEOUT
+    methods:
+      - GET
+      - POST
+  policyRefs:
+    - name: example-ratelimit
+    - name: example-cors
+  zone: space

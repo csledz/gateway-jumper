@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: gateway.telekom.de/v1alpha1
+kind: GatewayZone
+metadata:
+  name: space
+  namespace: gateway-core
+spec:
+  name: space
+  realm: default
+  stargate: https://stargate-integration.test.dhei.telekom.de
+  internetFacing: true
+  issuerUrl: https://stargate-integration.test.dhei.telekom.de/auth/realms/default
