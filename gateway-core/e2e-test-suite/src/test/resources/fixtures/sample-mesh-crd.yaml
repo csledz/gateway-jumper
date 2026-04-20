@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Sample MeshRoute CRD, shipped so the e2e suite can point at realistic
+# input when the sibling snapshot-loader module lands. Not read by the
+# embedded minimal proxy today.
+apiVersion: gateway.telekom.io/v1alpha1
+kind: MeshRoute
+metadata:
+  name: orders-cross-zone
+  namespace: playground
+spec:
+  originZone: A
+  targetZone: B
+  path: /api/orders/**
+  upstream:
+    url: http://orders-svc.zone-b.svc:8080
+  auth:
+    mesh:
+      audience: zone-B
+      ttl: 30s
+  failover:
+    order: [B, C]
+    onUnhealthy: skip

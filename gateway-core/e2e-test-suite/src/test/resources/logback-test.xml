@@ -1,0 +1,24 @@
+<!--
+SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+
+SPDX-License-Identifier: Apache-2.0
+-->
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{32} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="io.telekom.gateway" level="INFO"/>
+  <logger name="org.testcontainers" level="INFO"/>
+  <logger name="com.github.dockerjava" level="WARN"/>
+  <logger name="org.mockserver" level="WARN"/>
+  <logger name="io.lettuce.core" level="WARN"/>
+  <logger name="reactor.netty" level="WARN"/>
+  <logger name="org.springframework" level="WARN"/>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>

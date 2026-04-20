@@ -1,0 +1,27 @@
+{
+  "_comment": "Minimal snapshot shape matching the future snapshot-loader contract. Not consumed by the current embedded proxy; kept so schema drift is visible in PRs.",
+  "version": 1,
+  "zones": {
+    "A": { "edge": "stargate-A.local", "issuer": "zone-A" },
+    "B": { "edge": "stargate-B.local", "issuer": "zone-B" },
+    "C": { "edge": "stargate-C.local", "issuer": "zone-C" }
+  },
+  "routes": [
+    {
+      "id": "orders-cross-zone",
+      "origin": "A",
+      "target": "B",
+      "path": "/api/orders/**",
+      "audience": "zone-B",
+      "failover": ["B", "C"]
+    },
+    {
+      "id": "widgets-failover",
+      "origin": "A",
+      "target": "B",
+      "path": "/api/widgets/**",
+      "audience": "zone-B",
+      "failover": ["B", "C"]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "comment": "Test-only RSA keypair placeholder for zone C. Real keys are minted at runtime by MeshKeyStore.",
+  "kid": "zone-C-test-2026",
+  "alg": "RS256",
+  "use": "sig",
+  "status": "test-fixture"
+}
