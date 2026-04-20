@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+spring:
+  application:
+    name: gateway-service-discovery
+  main:
+    web-application-type: reactive
+
+server:
+  port: 8080
+
+gateway:
+  service-discovery:
+    # Default DNS TTL; set to PT0S to disable caching.
+    dns:
+      ttl: PT30S
+    # Opt-in K8s EndpointSlice watcher. Requires a reachable kubeconfig / in-cluster creds.
+    k8s:
+      enabled: false
+    # Opt-in Consul resolver.
+    consul:
+      enabled: false
+      base-url: http://localhost:8500
+
+logging:
+  level:
+    io.telekom.gateway.service_discovery: INFO
