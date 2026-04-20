@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: 8080
+  shutdown: GRACEFUL
+
+spring:
+  application:
+    name: gateway-core-mesh-federation
+  main:
+    web-application-type: reactive
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+
+gateway:
+  mesh:
+    local-zone: ${LOCAL_ZONE:zone-dev}
+    health-interval-seconds: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    io.telekom.gateway.mesh_federation: INFO
