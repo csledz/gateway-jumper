@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Gateway Core Helm
+
+# Runs on changes to Helm charts under gateway-core/helm-charts/.
+# Each discovered chart (directory containing a Chart.yaml) is linted and
+# templated as its own matrix leg. On pushes to `main` and on tag pushes the
+# charts are also packaged and uploaded as workflow artifacts so they can be
+# promoted to a chart registry in a follow-up step.
+
+on:
+  pull_request:
+    paths:
+      - 'gateway-core/helm-charts/**'
+      - '.github/workflows/gateway-core-helm.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'gateway-core/helm-charts/**'
+      - '.github/workflows/gateway-core-helm.yml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v3.16.2
+
+jobs:
+  discover-charts:
+    name: Discover Helm charts
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.discover.outputs.charts }}
+      has-charts: ${{ steps.discover.outputs.has-charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      - name: Find charts
+        id: discover
+        run: |
+          set -euo pipefail
+          charts=()
+          if [ -d gateway-core/helm-charts ]; then
+            while IFS= read -r chart; do
+              charts+=("$(dirname "$chart")")
+            done < <(find gateway-core/helm-charts -mindepth 2 -maxdepth 4 -name Chart.yaml | sort -u)
+          fi
+          if [ "${#charts[@]}" -eq 0 ]; then
+            echo "No Helm charts found under gateway-core/helm-charts."
+            echo "charts=[]" >> "${GITHUB_OUTPUT}"
+            echo "has-charts=false" >> "${GITHUB_OUTPUT}"
+          else
+            json="$(printf '%s\n' "${charts[@]}" | jq -R . | jq -s -c .)"
+            echo "Discovered charts: ${json}"
+            echo "charts=${json}" >> "${GITHUB_OUTPUT}"
+            echo "has-charts=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  lint-template:
+    name: Lint & template (${{ matrix.chart }})
+    runs-on: ubuntu-latest
+    needs: [discover-charts]
+    if: needs.discover-charts.outputs.has-charts == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.discover-charts.outputs.charts) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 #v4.3.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Build chart dependencies
+        run: helm dependency build "${{ matrix.chart }}"
+      - name: helm lint
+        run: helm lint "${{ matrix.chart }}"
+      - name: helm template
+        run: helm template release-test "${{ matrix.chart }}" > /tmp/rendered.yaml
+      - name: Upload rendered manifests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: helm-rendered-${{ hashFiles(format('{0}/Chart.yaml', matrix.chart)) }}
+          path: /tmp/rendered.yaml
+          if-no-files-found: ignore
+
+  package:
+    name: Package (${{ matrix.chart }})
+    runs-on: ubuntu-latest
+    needs: [discover-charts, lint-template]
+    # Only package on main pushes and tags; PRs just lint/template.
+    if: >-
+      needs.discover-charts.outputs.has-charts == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.discover-charts.outputs.charts) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 #v4.3.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Build chart dependencies
+        run: helm dependency build "${{ matrix.chart }}"
+      - name: helm package
+        run: |
+          mkdir -p dist
+          helm package "${{ matrix.chart }}" --destination dist
+      - name: Upload chart package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a #v7.0.1
+        with:
+          name: helm-package-${{ hashFiles(format('{0}/Chart.yaml', matrix.chart)) }}
+          path: dist/*.tgz
+          if-no-files-found: error
