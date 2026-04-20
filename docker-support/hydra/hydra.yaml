@@ -1,0 +1,102 @@
+# SPDX-FileCopyrightText: 2023 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Ory Hydra v2.2 configuration for the gateway-core test environment.
+# Reference: https://www.ory.sh/docs/hydra/reference/configuration
+#
+# NOTE: This file intentionally contains NO secret literals. System and
+# cookie secrets are supplied via environment variables (SECRETS_SYSTEM,
+# SECRETS_COOKIE), and client secrets are generated at runtime by the
+# hydra-seed init container.
+
+serve:
+  public:
+    port: 4444
+    host: 0.0.0.0
+    cors:
+      enabled: true
+      allowed_origins:
+        - "*"
+      allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+      allowed_headers:
+        - Authorization
+        - Content-Type
+      exposed_headers:
+        - Content-Type
+      allow_credentials: false
+      debug: true
+  admin:
+    port: 4445
+    host: 0.0.0.0
+  tls:
+    enabled: false
+
+urls:
+  # Issuer URL that appears in tokens / discovery documents. The
+  # gateway-core tests reach Hydra on localhost:4444 from the host network.
+  self:
+    issuer: http://localhost:4444/
+    public: http://localhost:4444/
+  # Consent / login UI is out of scope for the test landscape. We point
+  # these at a placeholder loopback URL; any sibling integration test that
+  # needs an authorization_code flow is expected to drive the consent step
+  # programmatically via Hydra's admin API (accept_login / accept_consent
+  # endpoints) rather than browse to a UI.
+  login: http://localhost:3000/login
+  consent: http://localhost:3000/consent
+  logout: http://localhost:3000/logout
+  error: http://localhost:3000/error
+  post_logout_redirect: http://localhost:3000/
+  identity_provider:
+    publicUrl: http://localhost:4444/
+
+strategies:
+  access_token: jwt
+  scope: wildcard
+
+# Short-lived tokens keep integration-test windows reasonable.
+ttl:
+  access_token: 10m
+  refresh_token: 30m
+  id_token: 10m
+  auth_code: 5m
+  login_consent_request: 10m
+
+oauth2:
+  expose_internal_errors: true
+  # hashers.bcrypt.cost=4 is explicitly a test-only setting (fast client
+  # secret hashing). Do not reuse this configuration outside the test
+  # landscape.
+  hashers:
+    bcrypt:
+      cost: 4
+
+# Webfinger / discovery endpoints. The OIDC discovery document is always
+# served at /.well-known/openid-configuration; JWKS at /.well-known/jwks.json.
+webfinger:
+  jwks:
+    broadcast_keys:
+      - hydra.openid.id-token
+  oidc_discovery:
+    supported_claims:
+      - email
+      - email_verified
+      - sub
+    supported_scope:
+      - openid
+      - email
+      - profile
+      - offline_access
+
+# /health/ready is public (no auth) so docker healthcheck and tests can
+# poll it freely.
+log:
+  level: info
+  format: json
+  leak_sensitive_values: false
