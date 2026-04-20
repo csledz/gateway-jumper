@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: 0
+
+spring:
+  application:
+    name: gateway-core-admin-status-api-test
+
+springdoc:
+  swagger-ui:
+    path: /admin/docs
+
+admin:
+  security:
+    mode: basic
+    user: admin
+    password: admin
+
+logging:
+  level:
+    io.telekom.gateway.admin_status_api: DEBUG

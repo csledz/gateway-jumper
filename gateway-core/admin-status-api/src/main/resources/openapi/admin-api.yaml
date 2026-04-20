@@ -1,0 +1,316 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+openapi: 3.1.0
+info:
+  title: gateway-core admin status API
+  version: v1
+  description: |
+    Read-only status API over the live runtime state of the Kong-free gateway-core.
+
+    The CRDs are the source of truth. This surface is **inspection-only**; all
+    mutations must be performed via `kubectl` against the CRDs.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8091
+    description: Local dev (basic auth)
+
+security:
+  - basicAuth: []
+  - mtls: []
+
+tags:
+  - name: routes
+    description: Runtime routes (read-only)
+  - name: zones
+    description: Runtime zones (read-only)
+  - name: consumers
+    description: Registered consumers (read-only)
+  - name: cache
+    description: In-process cache statistics (read-only)
+  - name: snapshot
+    description: Aggregated runtime snapshot (read-only)
+
+paths:
+  /admin/routes:
+    get:
+      tags: [routes]
+      summary: List runtime routes
+      operationId: listRoutes
+      responses:
+        '200':
+          description: List of runtime routes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Route'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/routes/{id}:
+    get:
+      tags: [routes]
+      summary: Fetch a runtime route by id
+      operationId: getRoute
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Route document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/zones:
+    get:
+      tags: [zones]
+      summary: List runtime zones
+      operationId: listZones
+      responses:
+        '200':
+          description: List of zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/zones/{name}/health:
+    get:
+      tags: [zones]
+      summary: Aggregate health snapshot for a zone
+      operationId: getZoneHealth
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Zone health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneHealth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/consumers:
+    get:
+      tags: [consumers]
+      summary: List registered consumers
+      operationId: listConsumers
+      responses:
+        '200':
+          description: List of consumers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consumer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/consumers/{id}:
+    get:
+      tags: [consumers]
+      summary: Fetch a consumer by id
+      operationId: getConsumer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consumer document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consumer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/cache-stats:
+    get:
+      tags: [cache]
+      summary: Snapshot of token cache, JWKS cache and schema cache
+      operationId: getCacheStats
+      responses:
+        '200':
+          description: Cache statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/snapshot:
+    get:
+      tags: [snapshot]
+      summary: Aggregated runtime snapshot
+      operationId: getSnapshot
+      responses:
+        '200':
+          description: Full snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Dev-only HTTP basic auth
+    mtls:
+      type: mutualTLS
+      description: Mutual TLS (prod mode)
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+    NotFound:
+      description: Not found
+
+  schemas:
+    Route:
+      type: object
+      required: [id, zone, upstream]
+      properties:
+        id:
+          type: string
+        zone:
+          type: string
+        upstream:
+          type: string
+        predicates:
+          type: array
+          items:
+            type: string
+        filters:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        lastUpdated:
+          type: string
+          format: date-time
+    Zone:
+      type: object
+      required: [name, environment, routeCount]
+      properties:
+        name:
+          type: string
+        environment:
+          type: string
+        routeCount:
+          type: integer
+    ZoneHealth:
+      type: object
+      required: [zone, status, healthyRoutes, totalRoutes, observedAt]
+      properties:
+        zone:
+          type: string
+        status:
+          type: string
+          enum: [HEALTHY, DEGRADED, UNKNOWN]
+        healthyRoutes:
+          type: integer
+        totalRoutes:
+          type: integer
+        observedAt:
+          type: string
+          format: date-time
+    Consumer:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        zone:
+          type: string
+    CacheEntry:
+      type: object
+      required: [name, size, hitCount, missCount, hitRatio]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        hitCount:
+          type: integer
+          format: int64
+        missCount:
+          type: integer
+          format: int64
+        hitRatio:
+          type: number
+          format: double
+    CacheStats:
+      type: object
+      required: [tokenCache, jwksCache, schemaCache]
+      properties:
+        tokenCache:
+          $ref: '#/components/schemas/CacheEntry'
+        jwksCache:
+          $ref: '#/components/schemas/CacheEntry'
+        schemaCache:
+          $ref: '#/components/schemas/CacheEntry'
+    Snapshot:
+      type: object
+      required: [capturedAt, routes, zones, consumers, cacheStats]
+      properties:
+        capturedAt:
+          type: string
+          format: date-time
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Route'
+        zones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zone'
+        consumers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Consumer'
+        cacheStats:
+          $ref: '#/components/schemas/CacheStats'

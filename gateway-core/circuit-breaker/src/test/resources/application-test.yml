@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2023 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: 0
+
+spring:
+  main:
+    web-application-type: reactive
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+
+logging:
+  level:
+    io.telekom.gateway.circuit_breaker: DEBUG
