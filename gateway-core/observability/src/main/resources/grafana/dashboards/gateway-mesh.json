@@ -1,0 +1,93 @@
+{
+  "annotations": { "list": [] },
+  "description": "Zone health and cross-zone latency for the gateway-core mesh.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Traffic per zone (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (zone) (rate(gateway_requests_total[5m]))",
+          "legendFormat": "{{zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Zone error ratio",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum by (zone) (rate(gateway_requests_total{status=~\"5..\"}[5m])) / ignoring(status) group_left sum by (zone) (rate(gateway_requests_total[5m]))",
+          "legendFormat": "{{zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Cross-zone latency (p95)",
+      "type": "heatmap",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (zone, le) (rate(gateway_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Upstream availability (1 = reachable)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "expr": "1 - (sum by (zone) (rate(gateway_requests_total{status=~\"5..\"}[5m])) / ignoring(status) group_left sum by (zone) (rate(gateway_requests_total[5m])))",
+          "legendFormat": "{{zone}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Active routes per zone",
+      "type": "bargauge",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "count by (zone) (sum by (zone, route) (rate(gateway_requests_total[5m])) > 0)",
+          "legendFormat": "{{zone}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["gateway-core", "observability", "mesh"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "gateway-core :: mesh health",
+  "uid": "gateway-core-mesh",
+  "version": 1,
+  "weekStart": ""
+}

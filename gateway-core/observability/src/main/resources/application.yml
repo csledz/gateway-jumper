@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+server:
+  port: ${GATEWAY_PORT:8080}
+  shutdown: GRACEFUL
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health, info
+  metrics:
+    tags:
+      application: ${spring.application.name:gateway-core}
+      zone: ${gateway.observability.zone:default}
+    distribution:
+      percentiles-histogram:
+        gateway.request.duration: true
+        http.server.requests: true
+        http.client.requests: true
+  observations:
+    enable:
+      spring.security: false
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      type: B3_MULTI
+  zipkin:
+    tracing:
+      endpoint: ${TRACING_URL:http://localhost:9411}/api/v2/spans
+
+spring:
+  application:
+    name: ${GATEWAY_NAME:gateway-core}
+  reactor:
+    context-propagation: auto
+  cloud:
+    gateway:
+      server:
+        webflux:
+          metrics:
+            enabled: true
+
+gateway:
+  observability:
+    zone: ${GATEWAY_ZONE:default}
+    logging:
+      json-enabled: true
+      include-mdc-keys: traceId,spanId,route,zone
+    tracing:
+      filter-param-list: X-Amz-.*,sig,signature,access_token,refresh_token,password,client_secret,api[_-]?key
+      otlp:
+        enabled: false
+        endpoint: ${OTLP_ENDPOINT:http://localhost:4317}
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    io.telekom.gateway.observability: INFO
