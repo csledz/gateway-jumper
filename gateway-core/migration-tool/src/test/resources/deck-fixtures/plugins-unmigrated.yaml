@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+_format_version: "3.0"
+services:
+  - name: svc-b
+    host: backend.default.svc
+    port: 8080
+    protocol: http
+    routes:
+      - name: route-b
+        paths: ["/b"]
+        plugins:
+          - name: ip-restriction
+            config:
+              allow: ["10.0.0.0/8"]
+          - name: rate-limiting
+            config:
+              minute: 60
+plugins:
+  - name: prometheus
+    config: {}
+  - name: pre-function
+    config:
+      functions: ["return true"]

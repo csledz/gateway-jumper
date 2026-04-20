@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+_format_version: "3.0"
+services:
+  - name: svc-a
+    host: backend.default.svc
+    port: 8080
+    protocol: http
+    routes:
+      - name: route-a
+        paths: ["/a"]
+        plugins:
+          - name: rate-limiting
+            config:
+              second: 5
+              minute: 100
+              policy: local
+          - name: cors
+            config:
+              origins: ["*"]
+              methods: ["GET", "POST"]
+              headers: ["Content-Type"]
+              credentials: true
+              max_age: 3600

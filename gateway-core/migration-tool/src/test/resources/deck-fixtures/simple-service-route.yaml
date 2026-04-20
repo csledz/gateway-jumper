@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+_format_version: "3.0"
+services:
+  - name: echo-service
+    host: echo.default.svc
+    port: 8080
+    protocol: http
+    path: /
+    routes:
+      - name: echo-route
+        paths:
+          - /echo
+        methods:
+          - GET
+          - POST
+        strip_path: true

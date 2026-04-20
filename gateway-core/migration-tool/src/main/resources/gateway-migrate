@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Wrapper that launches the gateway-migrate CLI from the shaded jar
+# produced by `mvn package` (target/gateway-migrate.jar).
+#
+# Usage: gateway-migrate migrate -i kong.yaml -o ./out
+
+set -eu
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# If unpacked alongside the jar, use that. Otherwise fall back to a jar on PATH.
+if [ -f "${DIR}/gateway-migrate.jar" ]; then
+  JAR="${DIR}/gateway-migrate.jar"
+elif [ -n "${GATEWAY_MIGRATE_JAR:-}" ]; then
+  JAR="${GATEWAY_MIGRATE_JAR}"
+else
+  # Look relative to the module build output.
+  JAR="${DIR}/../target/gateway-migrate.jar"
+fi
+
+if [ ! -f "${JAR}" ]; then
+  echo "gateway-migrate: cannot find gateway-migrate.jar (set GATEWAY_MIGRATE_JAR or place it next to this script)" >&2
+  exit 1
+fi
+
+exec java -jar "${JAR}" "$@"
