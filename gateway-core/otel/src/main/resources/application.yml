@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Default OTel wiring for modules that depend on gateway-core/otel.
+# Every sensitive value is sourced from an environment variable — there are no
+# literal tokens, API keys, or OTLP auth headers anywhere in this file.
+
+gateway:
+  otel:
+    enabled: true
+    sdk:
+      autoconfigure: true
+    logs:
+      # Off by default — opt-in per deployment. Turn on once the collector has
+      # a logs pipeline configured.
+      enabled: false
+
+# OpenTelemetry SDK autoconfigure — maps 1:1 to the `otel.*` env var contract.
+otel:
+  service:
+    name: ${spring.application.name:gateway-core}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+      protocol: grpc
+      # Auth headers, if any, come from OTEL_EXPORTER_OTLP_HEADERS. Never bake
+      # them into this file.
+  metric:
+    export:
+      interval: 10000
+  traces:
+    sampler: parentbased_always_on
+  # Pin propagators explicitly so the SDK honours the B3 interop requirement
+  # even before OtelPropagatorsConfig installs its composite.
+  propagators: tracecontext,baggage,b3multi
+  # Logs exporter disabled by default; flipped on when gateway.otel.logs.enabled=true.
+  logs:
+    exporter: ${OTEL_LOGS_EXPORTER:none}
+
+# Micrometer → OTLP bridge for metrics. Prometheus scrape stays on for
+# backwards compatibility with the existing `docker-compose prometheus` target.
+management:
+  otlp:
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+        step: 10s
+        resource-attributes:
+          service.namespace: gateway-core
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics

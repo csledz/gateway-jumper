@@ -14,3 +14,9 @@ path = "src/test/resources/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2023 Deutsche Telekom AG"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "gateway-core/otel/src/main/resources/META-INF/spring/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Deutsche Telekom AG"
+SPDX-License-Identifier = "Apache-2.0"

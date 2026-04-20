@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+# Test-only overrides. The SDK is constructed in-app (OtelTestApplication) so we
+# explicitly disable the autoconfigure path used in production.
+
+spring:
+  main:
+    banner-mode: off
+
+logging:
+  level:
+    io.telekom.gateway.otel: DEBUG
+
+gateway:
+  otel:
+    enabled: true
+    sdk:
+      autoconfigure: false
+    logs:
+      enabled: true
+
+otel:
+  service:
+    name: gateway-core-otel-test
+  logs:
+    exporter: none
+  metrics:
+    exporter: none
+  traces:
+    exporter: none
+
+management:
+  otlp:
+    metrics:
+      export:
+        enabled: false
