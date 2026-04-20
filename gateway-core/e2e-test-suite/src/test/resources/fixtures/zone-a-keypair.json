@@ -1,0 +1,7 @@
+{
+  "comment": "Test-only RSA keypair placeholder for zone A. Real keys are minted at runtime by MeshKeyStore; this file exists so downstream CRDs can reference a stable kid for local smoke tests.",
+  "kid": "zone-A-test-2026",
+  "alg": "RS256",
+  "use": "sig",
+  "status": "test-fixture"
+}
