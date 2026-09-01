@@ -14,14 +14,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import jumper.model.config.JumperConfig;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ServerWebExchange;
+import tools.jackson.databind.json.JsonMapper;
 
 class ExchangeStateManagerTest {
 
   private ServerWebExchange exchange;
   private Map<String, Object> attributes;
+
+  @BeforeAll
+  static void initObjectMapper() {
+    // JumperConfig (de)serialization goes through ObjectMapperUtil, which is normally populated by
+    // Spring. Populate the static holder so this context-less unit test does not depend on some
+    // other Spring-context test having run first (previously an order-dependent NPE).
+    new ObjectMapperUtil(JsonMapper.builder().build());
+  }
 
   @BeforeEach
   void setUp() {
@@ -47,6 +57,26 @@ class ExchangeStateManagerTest {
   void shouldReturnFalseWhenOAuthFilterNotSet() {
     // act
     boolean result = ExchangeStateManager.isOAuthFilterRequired(exchange);
+
+    // assert
+    assertThat(result).isFalse();
+  }
+
+  // arrange
+  @Test
+  void shouldSetAndGetMeshRoute() {
+    // act
+    ExchangeStateManager.setMeshRoute(exchange, true);
+
+    // assert
+    assertThat(ExchangeStateManager.isMeshRoute(exchange)).isTrue();
+  }
+
+  // arrange
+  @Test
+  void shouldReturnFalseWhenMeshRouteNotSet() {
+    // act
+    boolean result = ExchangeStateManager.isMeshRoute(exchange);
 
     // assert
     assertThat(result).isFalse();
@@ -135,6 +165,7 @@ class ExchangeStateManagerTest {
   void shouldClearAllCustomState() {
     // arrange
     ExchangeStateManager.setOAuthFilterRequired(exchange, true);
+    ExchangeStateManager.setMeshRoute(exchange, true);
     JumperConfig config = new JumperConfig();
     config.setConsumer("test-consumer");
     ExchangeStateManager.setJumperConfig(exchange, config);
@@ -155,6 +186,7 @@ class ExchangeStateManagerTest {
 
     // assert
     assertThat(ExchangeStateManager.isOAuthFilterRequired(exchange)).isFalse();
+    assertThat(ExchangeStateManager.isMeshRoute(exchange)).isFalse();
     assertThat(ExchangeStateManager.getJumperConfig(exchange)).isEmpty();
     assertThat(ExchangeStateManager.getCachedRequestBody(exchange)).isEmpty();
     assertThat(ExchangeStateManager.getCachedResponseBody(exchange)).isEmpty();

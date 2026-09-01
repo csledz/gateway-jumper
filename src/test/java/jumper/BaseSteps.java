@@ -50,8 +50,12 @@ public class BaseSteps {
   private WebTestClient webTestClient;
   private WebTestClient.ResponseSpec requestExchange;
   private String id;
+  private String spanId;
 
   @Autowired private RequestFilter rf;
+
+  @Value("${local.server.port}")
+  private int port;
 
   @Value("${jumper.stargate.url:https://stargate-integration.test.dhei.telekom.de}")
   private String stargateUrl;
@@ -137,22 +141,22 @@ public class BaseSteps {
 
   @And("verify received horizon events structure for method {word}")
   public void horizonVerifySpectreStructure(String method) {
-    mockHorizonServer.createVerifyStructure(method, stargateUrl);
+    mockHorizonServer.createVerifyStructure(id, method, stargateUrl);
   }
 
   @And("verify received horizon events payload")
   public void horizonVerifySpectrePayload() {
-    mockHorizonServer.createVerifyPayload();
+    mockHorizonServer.createVerifyPayload(id);
   }
 
   @And("verify received horizon events payload to be base64 encoded")
   public void horizonVerifySpectrePayloadBase64() {
-    mockHorizonServer.createVerifyPayloadBase64();
+    mockHorizonServer.createVerifyPayloadBase64(id);
   }
 
   @And("verify adjusted horizon event")
   public void horizonVerifyAdjustedEvent() {
-    mockHorizonServer.createVerifyEventType();
+    mockHorizonServer.createVerifyEventType(id);
   }
 
   @And("IDP set to respond with {int} status code")
@@ -188,6 +192,9 @@ public class BaseSteps {
         break;
       case "externalBasicAuthCredentials":
         mockIrisServer.createExpectationExternalBasicAuthCredentials(id);
+        break;
+      case "externalBasicAuthCredentialsConsumerScoped":
+        mockIrisServer.createExpectationExternalBasicAuthCredentialsConsumerScoped(id);
         break;
       case "externalUsernamePasswordCredentials":
         mockIrisServer.createExpectationExternalTokenFromUsernamePassword(id);
@@ -462,7 +469,10 @@ public class BaseSteps {
         fail("scenario not defined");
     }
 
-    URI builtUri = UriComponentsBuilder.fromUriString(uri).build(uriIsAlreadyEncoded).toUri();
+    URI builtUri =
+        UriComponentsBuilder.fromUriString("http://localhost:" + port + uri)
+            .build(uriIsAlreadyEncoded)
+            .toUri();
     requestExchange = webTestClient.get().uri(builtUri).headers(httpHeadersOfRequest).exchange();
   }
 

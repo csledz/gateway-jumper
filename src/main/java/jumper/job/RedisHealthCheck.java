@@ -14,7 +14,6 @@ import org.springframework.data.redis.connection.RedisClusterConnection;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisConnectionUtils;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -22,7 +21,6 @@ import org.springframework.util.Assert;
 @Slf4j
 @ConditionalOnBean(RedisConfig.class)
 @Component
-@EnableScheduling
 public class RedisHealthCheck {
 
   private static final String CONNECT = "CONNECTED";
@@ -65,7 +63,9 @@ public class RedisHealthCheck {
     if (connection instanceof RedisClusterConnection) {
       ((RedisClusterConnection) connection).clusterGetClusterInfo();
     } else {
-      connection.serverCommands().info("server");
+      // Use PING (category @fast/@connection) instead of INFO (category @dangerous)
+      // so the health check works with hardened Valkey/Redis ACLs (e.g. +@all -@dangerous).
+      connection.ping();
     }
   }
 

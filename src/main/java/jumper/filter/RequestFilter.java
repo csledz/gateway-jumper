@@ -79,6 +79,8 @@ public class RequestFilter extends AbstractGatewayFilterFactory<RequestFilter.Co
           enrichTracingWithDataFrom(readOnlyRequest);
 
           JumperConfig jumperConfig = jumperConfigService.resolveJumperConfig(readOnlyRequest);
+          ExchangeStateManager.setMeshRoute(
+              exchange, Objects.nonNull(jumperConfig.getInternalTokenEndpoint()));
 
           // calculate routing stuff and add it to exchange and JumperConfig
           URI finalApiUri =
@@ -111,22 +113,23 @@ public class RequestFilter extends AbstractGatewayFilterFactory<RequestFilter.Co
               jumperInfoRequest.ifPresent(
                   i -> i.setInfoScenario(false, false, true, false, false, false));
 
+              HeaderUtil.removeHeader(requestMutationBuilder, Constants.HEADER_CONSUMER_TOKEN);
               HeaderUtil.addHeader(
                   requestMutationBuilder,
                   Constants.HEADER_CONSUMER_TOKEN,
-                  jumperConfig.getConsumerToken());
+                  jumperConfig.getAuthorizationToken());
 
               checkForInternetFacingZone(
                   requestMutationBuilder,
                   jumperConfig.getConsumerOriginZone(),
-                  jumperConfig.getConsumerToken());
+                  jumperConfig.getAuthorizationToken());
 
               ExchangeStateManager.setOAuthFilterRequired(exchange, true);
 
             } else {
               // ALL NON MESH SCENARIOS
 
-              if (readOnlyRequest.getHeaders().containsKey(Constants.HEADER_X_TOKEN_EXCHANGE)
+              if (readOnlyRequest.getHeaders().containsHeader(Constants.HEADER_X_TOKEN_EXCHANGE)
                   && isInternetFacingZone(currentZone)) {
 
                 log.debug("----------------X-TOKEN-EXCHANGE HEADER-------------");
@@ -167,15 +170,14 @@ public class RequestFilter extends AbstractGatewayFilterFactory<RequestFilter.Co
                         i -> i.setInfoScenario(true, true, false, false, false, false));
 
                     String enhancedLastmileSecurityToken =
-                        tokenGeneratorService.generateEnhancedLastMileGatewayToken(
+                        tokenGeneratorService.generateProviderLmsToken(
                             jumperConfig,
                             String.valueOf(readOnlyRequest.getMethod()),
                             localIssuerUrl + "/" + jumperConfig.getRealmName(),
                             HeaderUtil.getLastValueFromHeaderField(
                                 readOnlyRequest, Constants.HEADER_X_PUBSUB_PUBLISHER_ID),
                             HeaderUtil.getLastValueFromHeaderField(
-                                readOnlyRequest, Constants.HEADER_X_PUBSUB_SUBSCRIBER_ID),
-                            false);
+                                readOnlyRequest, Constants.HEADER_X_PUBSUB_SUBSCRIBER_ID));
 
                     HeaderUtil.addHeader(
                         requestMutationBuilder,

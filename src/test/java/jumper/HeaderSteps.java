@@ -7,6 +7,7 @@ package jumper;
 import static jumper.config.Config.*;
 import static jumper.util.JumperConfigUtil.addIdSuffix;
 import static jumper.util.TokenUtil.getConsumerAccessTokenWithAud;
+import static jumper.util.TokenUtil.getConsumerAccessTokenWithMultipleAud;
 
 import io.cucumber.java.ParameterType;
 import io.cucumber.java.en.And;
@@ -82,11 +83,24 @@ public class HeaderSteps {
     baseSteps.setHttpHeadersOfRequest(RoutingConfigUtil.getSecondaryRouteHeaders(baseSteps));
   }
 
+  @Given("Secondary routing_config header set with configured audience")
+  public void secondaryRoutingConfigHeaderSetWithAudience() {
+    baseSteps.authHeader = TokenUtil.getConsumerAccessToken();
+    baseSteps.setHttpHeadersOfRequest(
+        RoutingConfigUtil.getSecondaryRouteHeadersWithAudience(baseSteps));
+  }
+
   @Given("Secondary routing_config with loadbalancing header set")
   public void secondaryRoutingConfigWithLoadbalancingHeaderSet() {
     baseSteps.authHeader = TokenUtil.getConsumerAccessToken();
     baseSteps.setHttpHeadersOfRequest(
         RoutingConfigUtil.getSecondaryRouteHeadersWithLoadbalancing(baseSteps));
+  }
+
+  @Given("Listener routing_config header set")
+  public void listenerRoutingConfigHeaderSet() {
+    baseSteps.authHeader = TokenUtil.getConsumerAccessToken();
+    baseSteps.setHttpHeadersOfRequest(RoutingConfigUtil.getListenerRouteHeaders(baseSteps));
   }
 
   @Given("Proxy routing_config header set")
@@ -147,6 +161,13 @@ public class HeaderSteps {
             httpHeaders -> httpHeaders.setBearerAuth(getConsumerAccessTokenWithAud())));
   }
 
+  @And("authorization token with multiple aud set")
+  public void setAuthorizationWithMultipleAud() {
+    baseSteps.setHttpHeadersOfRequest(
+        baseSteps.httpHeadersOfRequest.andThen(
+            httpHeaders -> httpHeaders.setBearerAuth(getConsumerAccessTokenWithMultipleAud())));
+  }
+
   @And("technical headers added")
   public void addTechnicalHeaders() {
     baseSteps.setHttpHeadersOfRequest(
@@ -159,6 +180,17 @@ public class HeaderSteps {
               httpHeaders.add("x-anonymous-consumer", "dummy");
               httpHeaders.add("x-anonymous-groups", "dummy");
               httpHeaders.add("x-forwarded-prefix", "dummy");
+            }));
+  }
+
+  @And("documented consumer headers are set")
+  public void addDocumentedConsumerHeaders() {
+    baseSteps.setHttpHeadersOfRequest(
+        baseSteps.httpHeadersOfRequest.andThen(
+            httpHeaders -> {
+              httpHeaders.set(Constants.HEADER_X_FORWARDED_FOR, FORWARDED_FOR);
+              httpHeaders.set(Constants.HEADER_X_FORWARDED_PATH, FORWARDED_PATH);
+              httpHeaders.set(CUSTOM_CONSUMER_HEADER, CUSTOM_CONSUMER_HEADER_VALUE);
             }));
   }
 

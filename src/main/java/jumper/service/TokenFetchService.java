@@ -6,13 +6,15 @@ package jumper.service;
 
 import static jumper.Constants.TOKEN_REQUEST_METHOD_POST;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.ssl.SslHandshakeTimeoutException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import jumper.Constants;
 import jumper.model.TokenInfo;
@@ -52,6 +54,9 @@ public class TokenFetchService {
   private final TokenCacheService tokenCache;
   private final TokenGeneratorService tokenGeneratorService;
 
+  private final ConcurrentHashMap<String, Mono<TokenInfo>> inFlightTokenRequests =
+      new ConcurrentHashMap<>();
+
   public Mono<TokenInfo> getInternalMeshAccessToken(JumperConfig jc) {
     return getAccessTokenWithClientCredentials(
         jc.getInternalTokenEndpoint() + Constants.ISSUER_SUFFIX,
@@ -67,24 +72,28 @@ public class TokenFetchService {
         tokenCache.generateTokenCacheKey(tokenEndpoint, clientID, clientSecret, scope);
 
     // try to get valid token from tokenCache...
-    return tokenCache
-        .getToken(tokenKey)
-        .map(Mono::just)
-        .orElseGet(
-            () -> { // ...otherwise retrieve a new one
-              MultiValueMap<String, String> requestParameter = new LinkedMultiValueMap<>();
-              requestParameter.add(Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID, clientID);
-              requestParameter.add(Constants.TOKEN_REQUEST_PARAMETER_CLIENT_SECRET, clientSecret);
-              requestParameter.add(
-                  Constants.TOKEN_REQUEST_PARAMETER_GRANT_TYPE,
-                  AuthorizationGrantType.CLIENT_CREDENTIALS.getValue());
+    return Mono.defer(
+        () ->
+            tokenCache
+                .getToken(tokenKey)
+                .map(Mono::just)
+                .orElseGet(
+                    () -> { // ...otherwise retrieve a new one, coalescing concurrent requests
+                      MultiValueMap<String, String> requestParameter = new LinkedMultiValueMap<>();
+                      requestParameter.add(Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID, clientID);
+                      requestParameter.add(
+                          Constants.TOKEN_REQUEST_PARAMETER_CLIENT_SECRET, clientSecret);
+                      requestParameter.add(
+                          Constants.TOKEN_REQUEST_PARAMETER_GRANT_TYPE,
+                          AuthorizationGrantType.CLIENT_CREDENTIALS.getValue());
 
-              if (StringUtils.isNotBlank(scope)) {
-                requestParameter.add(Constants.TOKEN_REQUEST_PARAMETER_SCOPE, scope);
-              }
+                      if (StringUtils.isNotBlank(scope)) {
+                        requestParameter.add(Constants.TOKEN_REQUEST_PARAMETER_SCOPE, scope);
+                      }
 
-              return getAccessTokenQuery(tokenEndpoint, tokenKey, requestParameter, null);
-            });
+                      return getOrCreateInFlightRequest(
+                          tokenEndpoint, tokenKey, requestParameter, null);
+                    }));
   }
 
   public Mono<TokenInfo> getAccessTokenWithOauthCredentialsObject(
@@ -93,68 +102,77 @@ public class TokenFetchService {
     final String tokenKey = tokenCache.generateTokenCacheKey(tokenEndpoint, oauthCredentials);
 
     // try to get valid token from tokenCache...
-    return tokenCache
-        .getToken(tokenKey)
-        .map(Mono::just)
-        .orElseGet(
-            () -> { // ...otherwise retrieve a new one
-              MultiValueMap<String, String> requestParameter = new LinkedMultiValueMap<>();
-              String basicAuth = null;
+    return Mono.defer(
+        () ->
+            tokenCache
+                .getToken(tokenKey)
+                .map(Mono::just)
+                .orElseGet(
+                    () -> { // ...otherwise retrieve a new one, coalescing concurrent requests
+                      MultiValueMap<String, String> requestParameter = new LinkedMultiValueMap<>();
+                      String basicAuth = null;
 
-              if (StringUtils.isNotBlank(oauthCredentials.getClientKey())) {
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID, oauthCredentials.getClientId());
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION,
-                    createJwtTokenForExternalIdp(tokenEndpoint, oauthCredentials));
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION_TYPE,
-                    Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION_TYPE_JWT);
-              }
+                      if (StringUtils.isNotBlank(oauthCredentials.getClientKey())) {
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID,
+                            oauthCredentials.getClientId());
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION,
+                            createJwtTokenForExternalIdp(tokenEndpoint, oauthCredentials));
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION_TYPE,
+                            Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ASSERTION_TYPE_JWT);
+                      }
 
-              if (StringUtils.isNotBlank(oauthCredentials.getClientId())
-                  && StringUtils.isNotBlank(oauthCredentials.getClientSecret())) {
+                      if (StringUtils.isNotBlank(oauthCredentials.getClientId())
+                          && StringUtils.isNotBlank(oauthCredentials.getClientSecret())) {
 
-                if (StringUtils.isNotBlank(oauthCredentials.getTokenRequest())
-                    && StringUtils.equalsIgnoreCase(
-                        TOKEN_REQUEST_METHOD_POST, oauthCredentials.getTokenRequest())) {
-                  requestParameter.add(
-                      Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID, oauthCredentials.getClientId());
-                  requestParameter.add(
-                      Constants.TOKEN_REQUEST_PARAMETER_CLIENT_SECRET,
-                      oauthCredentials.getClientSecret());
-                } else {
-                  basicAuth =
-                      BasicAuthUtil.encodeBasicAuth(
-                          oauthCredentials.getClientId(), oauthCredentials.getClientSecret());
-                }
-              }
+                        if (StringUtils.isNotBlank(oauthCredentials.getTokenRequest())
+                            && StringUtils.equalsIgnoreCase(
+                                TOKEN_REQUEST_METHOD_POST, oauthCredentials.getTokenRequest())) {
+                          requestParameter.add(
+                              Constants.TOKEN_REQUEST_PARAMETER_CLIENT_ID,
+                              oauthCredentials.getClientId());
+                          requestParameter.add(
+                              Constants.TOKEN_REQUEST_PARAMETER_CLIENT_SECRET,
+                              oauthCredentials.getClientSecret());
+                        } else {
+                          basicAuth =
+                              BasicAuthUtil.encodeBasicAuth(
+                                  oauthCredentials.getClientId(),
+                                  oauthCredentials.getClientSecret());
+                        }
+                      }
 
-              if (StringUtils.isNotBlank(oauthCredentials.getUsername())
-                  && StringUtils.isNotBlank(oauthCredentials.getPassword())) {
+                      if (StringUtils.isNotBlank(oauthCredentials.getUsername())
+                          && StringUtils.isNotBlank(oauthCredentials.getPassword())) {
 
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_USERNAME, oauthCredentials.getUsername());
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_PASSWORD, oauthCredentials.getPassword());
-              }
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_USERNAME,
+                            oauthCredentials.getUsername());
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_PASSWORD,
+                            oauthCredentials.getPassword());
+                      }
 
-              if (StringUtils.isNotBlank(oauthCredentials.getRefreshToken())) {
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_REFRESH_TOKEN,
-                    oauthCredentials.getRefreshToken());
-              }
+                      if (StringUtils.isNotBlank(oauthCredentials.getRefreshToken())) {
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_REFRESH_TOKEN,
+                            oauthCredentials.getRefreshToken());
+                      }
 
-              if (StringUtils.isNotEmpty(oauthCredentials.getScopes())) {
-                requestParameter.add(
-                    Constants.TOKEN_REQUEST_PARAMETER_SCOPE, oauthCredentials.getScopes());
-              }
+                      if (StringUtils.isNotEmpty(oauthCredentials.getScopes())) {
+                        requestParameter.add(
+                            Constants.TOKEN_REQUEST_PARAMETER_SCOPE, oauthCredentials.getScopes());
+                      }
 
-              requestParameter.add(
-                  Constants.TOKEN_REQUEST_PARAMETER_GRANT_TYPE, oauthCredentials.getGrantType());
+                      requestParameter.add(
+                          Constants.TOKEN_REQUEST_PARAMETER_GRANT_TYPE,
+                          oauthCredentials.getGrantType());
 
-              return getAccessTokenQuery(tokenEndpoint, tokenKey, requestParameter, basicAuth);
-            });
+                      return getOrCreateInFlightRequest(
+                          tokenEndpoint, tokenKey, requestParameter, basicAuth);
+                    }));
   }
 
   private String createJwtTokenForExternalIdp(
@@ -167,10 +185,14 @@ public class TokenFetchService {
     exp - REQUIRED. Expiration time on or after which the JWT MUST NOT be accepted for processing.
     iat - OPTIONAL. Time at which the JWT was issued.
     */
-    HashMap<String, String> claims = new HashMap<>();
-    claims.put(Constants.TOKEN_CLAIM_SUB, oauthCredentials.getClientId());
-    claims.put(Constants.TOKEN_CLAIM_AUD, tokenEndpoint);
-    claims.put(Constants.TOKEN_CLAIM_JTI, UUID.randomUUID().toString());
+    Claims claims =
+        Jwts.claims()
+            .subject(oauthCredentials.getClientId())
+            .audience()
+            .add(tokenEndpoint)
+            .and()
+            .id(UUID.randomUUID().toString())
+            .build();
 
     return tokenGeneratorService.createJwtTokenFromKey(
         claims,
@@ -178,6 +200,21 @@ public class TokenFetchService {
         new Date(System.currentTimeMillis() + 60 * 1000),
         new Date(System.currentTimeMillis()),
         oauthCredentials.getClientKey());
+  }
+
+  private Mono<TokenInfo> getOrCreateInFlightRequest(
+      String tokenEndpoint,
+      String tokenKey,
+      MultiValueMap<String, String> formData,
+      String basicAuthHeader) {
+    return inFlightTokenRequests.computeIfAbsent(
+        tokenKey,
+        k -> {
+          log.debug("Creating new token request for key: {}", tokenKey);
+          return getAccessTokenQuery(tokenEndpoint, tokenKey, formData, basicAuthHeader)
+              .doFinally(signal -> inFlightTokenRequests.remove(tokenKey))
+              .cache();
+        });
   }
 
   private Mono<TokenInfo> getAccessTokenQuery(
@@ -259,7 +296,8 @@ public class TokenFetchService {
                     throwable.getClass().getSimpleName(),
                     throwable.getMessage()))
         .retryWhen(
-            Retry.max(2)
+            Retry.backoff(2, Duration.ofMillis(200))
+                .maxBackoff(Duration.ofSeconds(2))
                 .filter(
                     throwable ->
                         throwable instanceof ConnectTimeoutException

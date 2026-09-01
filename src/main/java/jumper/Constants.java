@@ -34,7 +34,7 @@ public class Constants {
   public static final String HEADER_DEBUG_RESPONSE_HEADER = "X-Tardis-Debug";
   public static final String HEADER_X_ORIGIN_STARGATE = "X-Origin-Stargate";
   public static final String HEADER_X_ORIGIN_ZONE = "X-Origin-Zone";
-  public static final String HEADER_X_B3_TRACE_ID = "x-b3-traceid";
+  public static final String HEADER_X_B3_TRACE_ID = "X-B3-TraceId";
   public static final String HEADER_X_B3_SPAN_ID = "X-B3-SpanId";
   public static final String HEADER_X_B3_PARENT_SPAN_ID = "X-B3-ParentSpanId";
   public static final String HEADER_X_B3_SAMPLED = "X-B3-Sampled";
@@ -48,7 +48,9 @@ public class Constants {
   public static final String HEADER_X_SPACEGATE_TOKEN = "X-Spacegate-Token";
   public static final String HEADER_X_TOKEN_EXCHANGE = "X-Token-Exchange";
   public static final String HEADER_API_BASE_PATH = "api_base_path";
+  public static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
   public static final String HEADER_X_FORWARDED_HOST = "X-Forwarded-Host";
+  public static final String HEADER_X_FORWARDED_PATH = "X-Forwarded-Path";
   public static final String HEADER_X_FORWARDED_PORT = "X-Forwarded-Port";
   public static final String HEADER_X_FORWARDED_PROTO = "X-Forwarded-Proto";
   public static final String HEADER_X_FORWARDED_PORT_PORT = "443";
@@ -68,6 +70,7 @@ public class Constants {
   public static final String ISSUER_SUFFIX = "/protocol/openid-connect/token";
   public static final String LOCALHOST_ISSUER_SERVICE = "http://localhost:8081/api/v1";
   public static final String DEFAULT_REALM = "default";
+  public static final String REALMS_PATH_SEGMENT = "realms/";
   public static final String BEARER = "Bearer";
   public static final String BASIC = "Basic";
 
@@ -100,13 +103,14 @@ public class Constants {
   public static final String TOKEN_CLAIM_IAT = "iat";
   public static final String TOKEN_CLAIM_OPERATION = "operation";
   public static final String TOKEN_CLAIM_REQUEST_PATH = "requestPath";
-  public static final String TOKEN_CLAIM_ACCESS_TOKEN_SIGNATURE = "accessTokenSignature";
   public static final String TOKEN_CLAIM_ACCESS_TOKEN_ENVIRONMENT = "env";
   public static final String TOKEN_CLAIM_ACCESS_TOKEN_PUBLISHER_ID = "publisherId";
   public static final String TOKEN_CLAIM_ACCESS_TOKEN_SUBSCRIBER_ID = "subscriberId";
 
   public static final String BASIC_AUTH_PROVIDER_KEY = "default";
   public static final String OAUTH_PROVIDER_KEY = "default";
+  public static final String CLAIMS_DEFAULT_KEY = "default";
+  public static final String CLAIM_VALUE_FROM_CONSUMER_CLIENT_ID = "ConsumerClientId";
 
   public static final String ENVIRONMENT_PLACEHOLDER = "ENVIRONMENT_PLACEHOLDER";
 }

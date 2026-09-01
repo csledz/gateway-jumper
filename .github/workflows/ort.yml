@@ -4,16 +4,18 @@
 
 name: ORT Scan
 
+# An ORT scan is expensive, so it runs only where dependencies can have changed: on pull
+# requests and pushes that touch pom.xml.
+
 on:
   pull_request:
-  workflow_dispatch:
-    inputs:
-      release_name:
-        description: "Release to generate ORT report for"
-        type: string
   push:
     branches:
       - main
+      - next
+    paths:
+      - pom.xml
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,8 +34,8 @@ jobs:
     steps:
       - name: Checkout project
         if: github.event_name != 'pull_request' # Checkout not necessary for PRs
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d #v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d #v4
         id: filter
         with:
           filters: |
@@ -53,7 +55,7 @@ jobs:
           git config --global url.https://github.com/.insteadOf ssh://git@github.com/
           git config --global url.https://github.com/.insteadOf git://github.com/
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
       - name: Prepare ORT config
         run: |
           # Move into default config dir
@@ -75,7 +77,7 @@ jobs:
         with:
           fail-on: violations
           docker-cli-args: >-
-            -e ORT_ARTIFACTORY_TOKEN=${{ secrets.ORT_ARTIFACTORY_TOKEN }}
+            -e OSPO_ORT_ARTIFACTORY_CACHE_REPO_KEY=${{ secrets.OSPO_ORT_ARTIFACTORY_CACHE_REPO_KEY }}
           run: >
             cache-dependencies,
             cache-scan-results,
@@ -96,12 +98,6 @@ jobs:
           path: ${{ steps.ort.outputs.results-path }}
       - name: Submit SBOM to dependency graph
         if: github.ref == 'refs/heads/main'
-        uses: advanced-security/spdx-dependency-submission-action@169d22427d74f3faf93504e70b03eede8dab272a #v0.2.0
+        uses: advanced-security/spdx-dependency-submission-action@8b97fad313c1af2c5c490e1f72ab338371eb92f6 #v0.3.2
         with:
           filePath: ${{ steps.ort.outputs.results-path }}"
-      - name: Upload reports to release
-        if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda #v3.0.0
-        with:
-          name: ${{ github.event.inputs.release_name }}
-          files: ${{ steps.ort.outputs.results-path }}/*

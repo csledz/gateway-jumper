@@ -19,6 +19,9 @@ management:
     health:
       probes:
         enabled: true #healthcheck probes, liveness and readiness
+      group:
+        readiness:
+          include: readinessState
   endpoints:
     web:
       exposure.include: prometheus, health
@@ -30,19 +33,37 @@ management:
     sampling:
       probability: 1.0
     propagation:
+      # Keep B3 so traces stay correlated with Kong (and the x-tardis-traceid
+      # header flow) across the mesh. Export format (OTLP or Zipkin) is
+      # independent of wire propagation (B3).
       type: B3_MULTI
-  zipkin:
-    tracing:
-      endpoint: ${TRACING_URL:http://localhost:9411}/api/v2/spans
+  metrics:
+    distribution:
+      slo:
+        spring.cloud.gateway.http.client.requests: 1ms,2ms,5ms,10ms,20ms,50ms,100ms,200ms,500ms,1000ms,2000ms,5000ms,10000ms,30000ms,60000ms
+  # Trace exporter selection is profile-driven so exactly one exporter is active
+  # at runtime, even though both exporter libraries are on the classpath:
+  #   TRACING_EXPORTER=otlp   -> application-otlp.yml
+  #   TRACING_EXPORTER=zipkin -> application-zipkin.yml (default)
+  # The chart sets TRACING_EXPORTER; locally it defaults to zipkin.
 
 cache-manager:
   caffeine-caches:
-    - cache-names: [ cache-key-info ]
-      spec: maximumSize=1, expireAfterWrite=1m
-    - cache-names: [ cache-token-info ]
+    - cache-names: [cache-token-info]
       spec: maximumSize=${jumper.tokencache.maxSize:10000}, expireAfterWrite=${jumper.tokencache.expireAfterWriteMinutes:30}m
 
 spring:
+  profiles:
+    # Selects the active trace exporter at runtime. The chart sets
+    # TRACING_EXPORTER (otlp|zipkin); defaults to zipkin for local runs.
+    # Each profile (application-otlp.yml / application-zipkin.yml) configures
+    # its endpoint and excludes the other exporter's auto-configuration so that
+    # exactly one exporter is active even though both libraries are present.
+    active: ${TRACING_EXPORTER:zipkin}
+  task:
+    scheduling:
+      pool:
+        size: 2
   cache:
     type: caffeine
   lifecycle:
@@ -53,6 +74,7 @@ spring:
     gateway:
       server:
         webflux:
+          trusted-proxies: '${SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES:127\.0\.0\.1|::1|0:0:0:0:0:0:0:1|localhost}'
           forwarded:
             enabled: false
           x-forwarded:
@@ -143,8 +165,9 @@ jumper:
     dir: /keypair
     pk-file: tls.key
     kid-file: tls.kid
+    key-refresh-interval-ms: 60000
     tls:
-      additional-allowed-cipher-suites: [ ]
+      additional-allowed-cipher-suites: []
       default-allowed-cipher-suites:
         # tls 13
         - TLS_AES_256_GCM_SHA384 # high
@@ -181,6 +204,11 @@ jumper:
     ttlOffset: 10
     maxSize: 10000
     expireAfterWriteMinutes: 30
+  warmup:
+    enabled: false
+    timeout: 15s
+    iterations: 1
+    urls: 
   horizon:
     publishEventUrl: ${PUBLISH_EVENT_URL:http://producer.stage:8080/v1/events}
 

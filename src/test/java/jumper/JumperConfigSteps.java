@@ -23,7 +23,8 @@ public class JumperConfigSteps {
             httpHeaders -> {
               // tracing headers we use for matching on horizon mock
               httpHeaders.set(Constants.HEADER_X_B3_TRACE_ID, baseSteps.getId());
-              httpHeaders.set(Constants.HEADER_X_B3_SPAN_ID, baseSteps.getId());
+              httpHeaders.set(Constants.HEADER_X_B3_SPAN_ID, baseSteps.getSpanId());
+              httpHeaders.set(Constants.HEADER_X_B3_SAMPLED, "1");
 
               switch (jc_case) {
                 case "consumer":
@@ -44,6 +45,31 @@ public class JumperConfigSteps {
     baseSteps.setHttpHeadersOfRequest(
         baseSteps.httpHeadersOfRequest.andThen(
             httpHeaders -> httpHeaders.set(Constants.HEADER_JUMPER_CONFIG, getJcSecurity())));
+  }
+
+  @And("jumperConfig with {string} claim set")
+  public void setJumperConfigClaim(String jc_case) {
+    baseSteps.setHttpHeadersOfRequest(
+        baseSteps.httpHeadersOfRequest.andThen(
+            httpHeaders -> {
+              switch (jc_case) {
+                case "ConsumerClientId audience":
+                  httpHeaders.set(Constants.HEADER_JUMPER_CONFIG, getJcConsumerClientIdAudience());
+                  break;
+                case "literal audience":
+                  httpHeaders.set(Constants.HEADER_JUMPER_CONFIG, getJcLiteralAudience());
+                  break;
+                case "unsupported valueFrom audience":
+                  httpHeaders.set(
+                      Constants.HEADER_JUMPER_CONFIG, getJcUnsupportedValueFromAudience());
+                  break;
+                case "forged azp":
+                  httpHeaders.set(Constants.HEADER_JUMPER_CONFIG, getJcForgedAzpClaim());
+                  break;
+                default:
+                  assert false : "not defined";
+              }
+            }));
   }
 
   @And("jumperConfig oauth {string} set")
@@ -106,6 +132,15 @@ public class JumperConfigSteps {
                   httpHeaders.set(
                       Constants.HEADER_JUMPER_CONFIG,
                       JcOauthConfig.PROVIDER.getJcOauthGrantTypeWithKey(baseSteps.getId()));
+                  break;
+                case "provider with consumer scope only":
+                  httpHeaders.set(
+                      Constants.HEADER_JUMPER_CONFIG,
+                      getJcOauthProviderWithConsumerScopeOnly(baseSteps.getId()));
+                  break;
+                case "consumer grant_type without client auth":
+                  httpHeaders.set(
+                      Constants.HEADER_JUMPER_CONFIG, getJcOauthConsumerWithoutClientAuth());
                   break;
                 default:
                   httpHeaders.set(

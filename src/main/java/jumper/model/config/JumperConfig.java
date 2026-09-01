@@ -4,10 +4,9 @@
 
 package jumper.model.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwt;
 import java.util.*;
@@ -17,9 +16,12 @@ import jumper.util.LoadBalancingUtil;
 import jumper.util.OauthTokenUtil;
 import jumper.util.ObjectMapperUtil;
 import lombok.Data;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
 
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -28,6 +30,7 @@ public class JumperConfig {
 
   private HashMap<String, OauthCredentials> oauth;
   private HashMap<String, BasicAuthCredentials> basicAuth;
+  private HashMap<String, List<ConfiguredClaim>> claims;
   private HashMap<String, RouteListener> routeListener;
   private List<String> removeHeaders;
   private GatewayClient gatewayClient;
@@ -39,14 +42,16 @@ public class JumperConfig {
   String consumer;
   String consumerOriginStargate;
   String consumerOriginZone;
-  String consumerToken;
+
+  @ToString.Exclude String authorizationToken;
   String externalTokenEndpoint;
 
   @JsonProperty("issuer")
   String internalTokenEndpoint;
 
   String clientId;
-  String clientSecret;
+
+  @ToString.Exclude String clientSecret;
   Boolean accessTokenForwarding;
 
   @JsonProperty("realm")
@@ -58,7 +63,8 @@ public class JumperConfig {
   String envName;
 
   String xSpacegateClientId;
-  String xSpacegateClientSecret;
+
+  @ToString.Exclude String xSpacegateClientSecret;
   String xSpacegateScope;
 
   // calculated routing stuff within requestFilter
@@ -73,7 +79,7 @@ public class JumperConfig {
     try {
       String decodedJson = ObjectMapperUtil.getInstance().writeValueAsString(o);
       jsonConfigBase64 = Base64.getEncoder().encodeToString(decodedJson.getBytes());
-    } catch (JsonProcessingException e) {
+    } catch (JacksonException e) {
       log.error("can not base64encode object: " + o);
     }
 
@@ -84,7 +90,7 @@ public class JumperConfig {
     String decodedJson = new String(Base64.getDecoder().decode(jsonConfigBase64.getBytes()));
     try {
       return ObjectMapperUtil.getInstance().readValue(decodedJson, typeReference);
-    } catch (JsonProcessingException e) {
+    } catch (JacksonException e) {
       throw new RuntimeException("can not base64decode header: " + jsonConfigBase64);
     }
   }
@@ -100,7 +106,7 @@ public class JumperConfig {
   private void fillWithLegacyHeaders(ServerHttpRequest request) {
 
     // proxy & real
-    if (request.getHeaders().containsKey(Constants.HEADER_REMOTE_API_URL)) {
+    if (request.getHeaders().containsHeader(Constants.HEADER_REMOTE_API_URL)) {
       setRemoteApiUrl(
           HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_REMOTE_API_URL));
     } else if (Objects.nonNull(loadBalancing) && !loadBalancing.getServers().isEmpty()) {
@@ -122,7 +128,7 @@ public class JumperConfig {
 
     // real
     setApiBasePath(HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_API_BASE_PATH));
-    if (request.getHeaders().containsKey(Constants.HEADER_ACCESS_TOKEN_FORWARDING)) {
+    if (request.getHeaders().containsHeader(Constants.HEADER_ACCESS_TOKEN_FORWARDING)) {
       setAccessTokenForwarding(
           Boolean.valueOf(
               HeaderUtil.getLastValueFromHeaderField(
@@ -147,29 +153,33 @@ public class JumperConfig {
         HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_X_SPACEGATE_SCOPE));
 
     // processing
-    setConsumerToken(
+    setAuthorizationToken(
         HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_AUTHORIZATION));
-    Jwt<?, Claims> consumerTokenClaims =
-        OauthTokenUtil.getAllClaimsFromToken(
-            OauthTokenUtil.getTokenWithoutSignature(consumerToken));
-    setConsumer(consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_CLIENT_ID, String.class));
+    Jwt<?, Claims> authorizationTokenClaims =
+        OauthTokenUtil.getAllClaimsFromToken(authorizationToken);
+    setConsumer(
+        authorizationTokenClaims.getBody().get(Constants.TOKEN_CLAIM_CLIENT_ID, String.class));
     setConsumerOriginStargate(
-        consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_STARGATE, String.class));
+        authorizationTokenClaims
+            .getBody()
+            .get(Constants.TOKEN_CLAIM_ORIGIN_STARGATE, String.class));
     setConsumerOriginZone(
-        consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_ZONE, String.class));
+        authorizationTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_ZONE, String.class));
   }
 
   public void fillProcessingInfo(ServerHttpRequest request) {
-    setConsumerToken(
+    setAuthorizationToken(
         HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_AUTHORIZATION));
-    Jwt<?, Claims> consumerTokenClaims =
-        OauthTokenUtil.getAllClaimsFromToken(
-            OauthTokenUtil.getTokenWithoutSignature(consumerToken));
-    setConsumer(consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_CLIENT_ID, String.class));
+    Jwt<?, Claims> authorizationTokenClaims =
+        OauthTokenUtil.getAllClaimsFromToken(authorizationToken);
+    setConsumer(
+        authorizationTokenClaims.getBody().get(Constants.TOKEN_CLAIM_CLIENT_ID, String.class));
     setConsumerOriginStargate(
-        consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_STARGATE, String.class));
+        authorizationTokenClaims
+            .getBody()
+            .get(Constants.TOKEN_CLAIM_ORIGIN_STARGATE, String.class));
     setConsumerOriginZone(
-        consumerTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_ZONE, String.class));
+        authorizationTokenClaims.getBody().get(Constants.TOKEN_CLAIM_ORIGIN_ZONE, String.class));
 
     // Spectre stuff
     JumperConfig jc =
@@ -177,6 +187,8 @@ public class JumperConfig {
             HeaderUtil.getLastValueFromHeaderField(request, Constants.HEADER_JUMPER_CONFIG));
     this.setRouteListener(jc.getRouteListener());
     this.setGatewayClient(jc.getGatewayClient());
+
+    resolveMissingRealmName();
 
     // check loadBalancing
     if (Objects.nonNull(loadBalancing) && !loadBalancing.getServers().isEmpty()) {
@@ -210,42 +222,150 @@ public class JumperConfig {
     return jc;
   }
 
+  /**
+   * Fills in the realm for configs assembled from {@code routing_config}, the path taken whenever
+   * zone failover is configured. The realm can be absent there: the control plane emits the {@code
+   * realm} header only for non-failover routes, and a per-entry {@code realm} is omitted when
+   * empty. Without a realm, {@code SpectreService} builds its publish URL from {@code null} and the
+   * request it was only observing fails.
+   *
+   * <p>Deliberately additive: a realm already present in the config blob is never overwritten, so
+   * the legacy-header path in {@link #fillWithLegacyHeaders(ServerHttpRequest)} keeps its existing
+   * precedence and an entry keeps the realm the control plane assigned it.
+   */
+  private void resolveMissingRealmName() {
+    if (StringUtils.isNotBlank(realmName)) {
+      return;
+    }
+
+    setRealmName(determineRealmName());
+  }
+
+  /**
+   * Realm for a {@code routing_config} entry that carries none of its own: the realm embedded in
+   * the entry's own issuer, else {@link Constants#DEFAULT_REALM}.
+   *
+   * <p>Both sources are the routing_config blob itself, and that is deliberate - the realm selects
+   * the Horizon destination and the issuer of gateway-signed tokens, so it must not be sourced from
+   * a channel the caller can write. Two channels are excluded for that reason:
+   *
+   * <ul>
+   *   <li>the inbound {@code realm} header - the control plane's last-mile-security feature is the
+   *       only thing that adds or replaces it, and that feature is skipped for failover routes, so
+   *       on this path a caller-supplied header arrives unsanitised;
+   *   <li>{@code gatewayClient.issuer} - {@code gatewayClient} comes from the {@code jumper_config}
+   *       header, which the control plane emits <em>instead of</em> {@code routing_config} and
+   *       never alongside it, so on this path its only producer is the caller.
+   * </ul>
+   *
+   * <p>Package-private for testing.
+   */
+  String determineRealmName() {
+    if (StringUtils.isNotBlank(internalTokenEndpoint)
+        && internalTokenEndpoint.contains(Constants.REALMS_PATH_SEGMENT)) {
+      return internalTokenEndpoint.replaceFirst(".*" + Constants.REALMS_PATH_SEGMENT, "");
+    }
+
+    log.warn(
+        "no realm resolvable for routing_config entry, falling back to {}",
+        Constants.DEFAULT_REALM);
+    return Constants.DEFAULT_REALM;
+  }
+
   public boolean isListenerMatched() {
     return Objects.nonNull(getRouteListener())
         && Objects.nonNull(getRouteListener().get(getConsumer()));
   }
 
   public Optional<BasicAuthCredentials> getBasicAuthCredentials() {
-    if (Objects.nonNull(getBasicAuth())) {
-
-      if (getBasicAuth().containsKey(getConsumer())) {
-        return Optional.of(getBasicAuth().get(getConsumer()));
-      }
-
-      if (getBasicAuth().containsKey(Constants.BASIC_AUTH_PROVIDER_KEY)) {
-        return Optional.of(getBasicAuth().get(Constants.BASIC_AUTH_PROVIDER_KEY));
-      }
+    if (Objects.isNull(getBasicAuth())) {
+      return Optional.empty();
     }
 
-    return Optional.empty();
+    BasicAuthCredentials consumerEntry = getBasicAuth().get(getConsumer());
+    if (Objects.nonNull(consumerEntry)) {
+      return Optional.of(consumerEntry);
+    }
+
+    return Optional.ofNullable(getBasicAuth().get(Constants.BASIC_AUTH_PROVIDER_KEY));
   }
 
   public Optional<OauthCredentials> getOauthCredentials() {
-    if (Objects.nonNull(getOauth())) {
-      if (getOauth().containsKey(getConsumer())) {
-        return Optional.of(getOauth().get(getConsumer()));
-      }
-
-      if (getOauth().containsKey(Constants.OAUTH_PROVIDER_KEY)) {
-        return Optional.of(getOauth().get(Constants.OAUTH_PROVIDER_KEY));
-      }
+    if (Objects.isNull(getOauth())) {
+      return Optional.empty();
     }
 
-    return Optional.empty();
+    OauthCredentials consumerEntry = getOauth().get(getConsumer());
+    OauthCredentials providerDefault = getOauth().get(Constants.OAUTH_PROVIDER_KEY);
+
+    if (Objects.isNull(consumerEntry)) {
+      return Optional.ofNullable(providerDefault);
+    }
+
+    return Optional.of(applyScopeOnlyOverride(consumerEntry, providerDefault));
+  }
+
+  /**
+   * A consumer entry that carries nothing but scopes cannot request a token on its own. In that
+   * case the provider's credentials are used together with the consumer's scopes, so that a
+   * subscription can narrow the scopes of the provider's external identity provider configuration.
+   *
+   * <p>The override is only applied when consumer and provider entry agree on whether a grantType
+   * is present, because that flag decides which token path {@code UpstreamOAuthFilter} takes. Never
+   * switching the path keeps the {@code X-Spacegate-*} header precedence of the legacy path intact.
+   */
+  private OauthCredentials applyScopeOnlyOverride(
+      OauthCredentials consumerEntry, OauthCredentials providerDefault) {
+
+    if (consumerEntry.hasAnyCredentialField()
+        || StringUtils.isBlank(consumerEntry.getScopes())
+        || Objects.isNull(providerDefault)
+        || StringUtils.isBlank(consumerEntry.getGrantType())
+        || StringUtils.isBlank(providerDefault.getGrantType())) {
+      return consumerEntry;
+    }
+
+    return providerDefault.copyWithScopes(consumerEntry.getScopes());
   }
 
   public String getSecurityScopes() {
     Optional<OauthCredentials> oauthCredentials = getOauthCredentials();
     return oauthCredentials.map(OauthCredentials::getScopes).orElse(null);
+  }
+
+  @JsonIgnore
+  public Optional<ConfiguredClaim> getConfiguredAudienceClaim() {
+    if (Objects.isNull(claims)) {
+      return Optional.empty();
+    }
+
+    List<ConfiguredClaim> defaultClaims = claims.get(Constants.CLAIMS_DEFAULT_KEY);
+    if (Objects.isNull(defaultClaims)) {
+      return Optional.empty();
+    }
+
+    List<ConfiguredClaim> audienceClaims =
+        defaultClaims.stream()
+            .filter(Objects::nonNull)
+            .filter(claim -> Constants.TOKEN_CLAIM_AUD.equals(claim.getKey()))
+            .toList();
+
+    // The control plane schema allows a single aud claim, so additional entries indicate config
+    // drift. The first entry still wins, so warn instead of failing an otherwise valid request.
+    if (audienceClaims.size() > 1) {
+      log.warn(
+          "Configured claims contain {} aud entries, only the first one is applied",
+          audienceClaims.size());
+    }
+
+    return audienceClaims.stream().findFirst();
+  }
+
+  @Data
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public static class ConfiguredClaim {
+    private String key;
+    private String value;
+    private String valueFrom;
   }
 }
