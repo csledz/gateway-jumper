@@ -7,5 +7,5 @@ Feature: Migrate supported Kong plugins to GatewayPolicy CRDs
     Given the Kong decK fixture "plugins-supported.yaml"
     When I run "migrate"
     Then the CLI exit code is 0
-    And a GatewayPolicy of type "RateLimiting" is emitted
-    And a GatewayPolicy of type "Cors" is emitted
+    And a GatewayPolicy of type "ratelimit" is emitted
+    And a GatewayPolicy of type "cors" is emitted

@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CrdResource {
 
-  /** Fully qualified API group / version, e.g. {@code gateway.telekom.io/v1alpha1}. */
+  /** Fully qualified API group / version, e.g. {@code gateway.telekom.de/v1alpha1}. */
   private String apiVersion;
 
   /** CRD kind, e.g. {@code GatewayRoute}. */
@@ -32,6 +32,12 @@ public class CrdResource {
 
   /** Arbitrary spec body, shape depends on {@link #kind}. */
   private Map<String, Object> spec = new LinkedHashMap<>();
+
+  /**
+   * For {@code kind: Secret} only: the {@code stringData} block (k8s auto-base64-encodes values on
+   * apply). Null for CRDs that use {@link #spec}.
+   */
+  private Map<String, Object> stringData;
 
   public static CrdResource of(String apiVersion, String kind, String name) {
     CrdResource r = new CrdResource();

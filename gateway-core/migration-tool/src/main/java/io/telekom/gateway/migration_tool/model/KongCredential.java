@@ -21,4 +21,10 @@ public class KongCredential {
   private String algorithm;
   private String username;
   private String password;
+
+  /** JWT issuer claim (optional, reserved for JWT credentials). */
+  private String issuer;
+
+  /** JWKS URI for JWT issuer (optional, reserved for JWT credentials). */
+  private String jwksUri;
 }

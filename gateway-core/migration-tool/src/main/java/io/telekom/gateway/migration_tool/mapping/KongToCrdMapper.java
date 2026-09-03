@@ -37,7 +37,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class KongToCrdMapper {
 
-  public static final String API_VERSION = "gateway.telekom.io/v1alpha1";
+  public static final String API_VERSION = "gateway.telekom.de/v1alpha1";
+  public static final String SECRET_API_VERSION = "v1";
 
   public MigrationResult map(DeckConfig cfg) {
     MigrationResult result = new MigrationResult();
@@ -165,15 +166,56 @@ public final class KongToCrdMapper {
     for (int i = 0; i < creds.size(); i++) {
       String credName = credentialName(consumerName, typeSlug, i);
       out.getResources().add(buildCredential(credName, consumerName, creds.get(i)));
+      CrdResource secret = buildCredentialSecret(credName, creds.get(i));
+      if (secret != null) {
+        out.getResources().add(secret);
+      }
       refs.add(credName);
     }
   }
 
+  /**
+   * Emit a {@code GatewayCredential} whose shape matches the CRD: {@code type}, {@code issuer},
+   * {@code jwksUri}, {@code secretRef}, {@code scopes}. The actual key material lives in a
+   * companion k8s {@code Secret} produced by {@link #buildCredentialSecret}; this separation is
+   * required because the CRD has no plaintext-material fields.
+   */
   private CrdResource buildCredential(String name, String consumerName, KongCredential cred) {
     CrdResource r = CrdResource.of(API_VERSION, "GatewayCredential", name);
     r.getSpec().put("consumerRef", consumerName);
-    r.getSpec().put("type", cred.getType());
+    r.getSpec().put("type", credentialType(cred.getType()));
 
+    switch (cred.getType()) {
+      case "jwt" -> {
+        if (cred.getIssuer() != null) {
+          r.getSpec().put("issuer", cred.getIssuer());
+        }
+        if (cred.getJwksUri() != null) {
+          r.getSpec().put("jwksUri", cred.getJwksUri());
+        }
+        Map<String, Object> secretRef = new LinkedHashMap<>();
+        secretRef.put("name", name + "-secret");
+        r.getSpec().put("secretRef", secretRef);
+      }
+      case "key-auth", "basic-auth" -> {
+        Map<String, Object> secretRef = new LinkedHashMap<>();
+        secretRef.put("name", name + "-secret");
+        r.getSpec().put("secretRef", secretRef);
+      }
+      default -> {
+        // unreachable given reader
+      }
+    }
+    return r;
+  }
+
+  /**
+   * Emit a Kubernetes {@code Secret} carrying the credential material. Kong's decK YAML stores
+   * keys/passwords in plaintext; we preserve them here (the operator is expected to encrypt-at-rest
+   * via the usual {@code kubectl apply | sealed-secrets | SOPS} flow before commit).
+   */
+  private CrdResource buildCredentialSecret(String name, KongCredential cred) {
+    CrdResource s = CrdResource.of(SECRET_API_VERSION, "Secret", name + "-secret");
     Map<String, Object> data = new LinkedHashMap<>();
     switch (cred.getType()) {
       case "jwt" -> {
@@ -182,18 +224,30 @@ public final class KongToCrdMapper {
         if (cred.getAlgorithm() != null) data.put("algorithm", cred.getAlgorithm());
       }
       case "key-auth" -> {
-        if (cred.getKey() != null) data.put("key", cred.getKey());
+        if (cred.getKey() != null) data.put("apikey", cred.getKey());
       }
       case "basic-auth" -> {
         if (cred.getUsername() != null) data.put("username", cred.getUsername());
         if (cred.getPassword() != null) data.put("password", cred.getPassword());
       }
       default -> {
-        // unreachable given reader
+        return null;
       }
     }
-    r.getSpec().put("data", data);
-    return r;
+    if (data.isEmpty()) {
+      return null;
+    }
+    s.setStringData(data);
+    return s;
+  }
+
+  private static String credentialType(String kongType) {
+    return switch (kongType) {
+      case "jwt" -> "jwt";
+      case "key-auth" -> "apikey";
+      case "basic-auth" -> "basic";
+      default -> kongType;
+    };
   }
 
   // --- plugins ------------------------------------------------------------
@@ -220,44 +274,53 @@ public final class KongToCrdMapper {
 
   private CrdResource buildRateLimitingPolicy(KongPlugin p) {
     CrdResource r = CrdResource.of(API_VERSION, "GatewayPolicy", policyName(p));
-    r.getSpec().put("type", "RateLimiting");
-    Map<String, Object> cfg = new LinkedHashMap<>();
+    r.getSpec().put("type", "ratelimit");
+    // Kong's rate-limiting plugin has per-second/minute/hour counters; gateway-core
+    // takes a single (limit, window) pair. Collapse the finest-grained non-null one.
+    Map<String, Object> settings = new LinkedHashMap<>();
     Object perSecond = p.getConfig().get("second");
     Object perMinute = p.getConfig().get("minute");
     Object perHour = p.getConfig().get("hour");
-    if (perSecond != null) cfg.put("perSecond", perSecond);
-    if (perMinute != null) cfg.put("perMinute", perMinute);
-    if (perHour != null) cfg.put("perHour", perHour);
-    if (p.getConfig().get("policy") != null) cfg.put("policy", p.getConfig().get("policy"));
-    r.getSpec().put("config", cfg);
-    attachScope(r, p);
+    if (perSecond != null) {
+      settings.put("limit", perSecond);
+      settings.put("window", "1s");
+    } else if (perMinute != null) {
+      settings.put("limit", perMinute);
+      settings.put("window", "1m");
+    } else if (perHour != null) {
+      settings.put("limit", perHour);
+      settings.put("window", "1h");
+    } else {
+      settings.put("limit", 100);
+      settings.put("window", "1m");
+    }
+    settings.put("key", "consumer");
+    r.getSpec().put("settings", Map.of("ratelimit", settings));
     return r;
   }
 
   private CrdResource buildCorsPolicy(KongPlugin p) {
     CrdResource r = CrdResource.of(API_VERSION, "GatewayPolicy", policyName(p));
-    r.getSpec().put("type", "Cors");
-    Map<String, Object> cfg = new LinkedHashMap<>();
-    copyIfPresent(p.getConfig(), cfg, "origins", "allowedOrigins");
-    copyIfPresent(p.getConfig(), cfg, "methods", "allowedMethods");
-    copyIfPresent(p.getConfig(), cfg, "headers", "allowedHeaders");
-    copyIfPresent(p.getConfig(), cfg, "exposed_headers", "exposedHeaders");
-    copyIfPresent(p.getConfig(), cfg, "credentials", "allowCredentials");
-    copyIfPresent(p.getConfig(), cfg, "max_age", "maxAge");
-    r.getSpec().put("config", cfg);
-    attachScope(r, p);
+    r.getSpec().put("type", "cors");
+    Map<String, Object> settings = new LinkedHashMap<>();
+    copyIfPresent(p.getConfig(), settings, "origins", "allowedOrigins");
+    copyIfPresent(p.getConfig(), settings, "methods", "allowedMethods");
+    copyIfPresent(p.getConfig(), settings, "headers", "allowedHeaders");
+    copyIfPresent(p.getConfig(), settings, "exposed_headers", "exposedHeaders");
+    copyIfPresent(p.getConfig(), settings, "credentials", "allowCredentials");
+    copyIfPresent(p.getConfig(), settings, "max_age", "maxAge");
+    r.getSpec().put("settings", Map.of("cors", settings));
     return r;
   }
 
   private CrdResource buildRequestValidatorPolicy(KongPlugin p) {
     CrdResource r = CrdResource.of(API_VERSION, "GatewayPolicy", policyName(p));
-    r.getSpec().put("type", "RequestValidator");
-    Map<String, Object> cfg = new LinkedHashMap<>();
-    copyIfPresent(p.getConfig(), cfg, "body_schema", "bodySchema");
-    copyIfPresent(p.getConfig(), cfg, "parameter_schema", "parameterSchema");
-    copyIfPresent(p.getConfig(), cfg, "version", "version");
-    r.getSpec().put("config", cfg);
-    attachScope(r, p);
+    r.getSpec().put("type", "requestValidation");
+    Map<String, Object> settings = new LinkedHashMap<>();
+    copyIfPresent(p.getConfig(), settings, "body_schema", "bodySchema");
+    copyIfPresent(p.getConfig(), settings, "parameter_schema", "parameterSchema");
+    copyIfPresent(p.getConfig(), settings, "version", "version");
+    r.getSpec().put("settings", Map.of("requestValidation", settings));
     return r;
   }
 
@@ -266,19 +329,6 @@ public final class KongToCrdMapper {
     Object v = src.get(srcKey);
     if (v != null) {
       dst.put(dstKey, v);
-    }
-  }
-
-  private static void attachScope(CrdResource r, KongPlugin p) {
-    if (p.getScope() != null && p.getScopeRef() != null) {
-      Map<String, Object> attach = new LinkedHashMap<>();
-      attach.put("scope", p.getScope());
-      attach.put("ref", p.getScopeRef());
-      r.getSpec().put("attachment", attach);
-    } else if (p.getScope() != null) {
-      Map<String, Object> attach = new LinkedHashMap<>();
-      attach.put("scope", p.getScope());
-      r.getSpec().put("attachment", attach);
     }
   }
 

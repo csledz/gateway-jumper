@@ -9,5 +9,5 @@ Feature: Migrate Kong consumer credentials
     Then the CLI exit code is 0
     And a "GatewayConsumer" resource named "alice" is emitted
     And a GatewayCredential of type "jwt" for consumer "alice" is emitted
-    And a GatewayCredential of type "key-auth" for consumer "alice" is emitted
-    And a GatewayCredential of type "basic-auth" for consumer "alice" is emitted
+    And a GatewayCredential of type "apikey" for consumer "alice" is emitted
+    And a GatewayCredential of type "basic" for consumer "alice" is emitted
