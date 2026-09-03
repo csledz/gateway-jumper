@@ -1,196 +1,215 @@
 <!-- SPDX-FileCopyrightText: 2026 Deutsche Telekom AG -->
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 
 # gateway-core module map
 
-`gateway-core` is a multi-module Maven reactor of 20 sibling modules. This document gives
-one paragraph per module: what it owns, what it depends on, and where its logic comes
-from (ported from jumper, new for `gateway-core`, or third-party wrapping). For the
-architectural context, see [../ARCHITECTURE.md](../ARCHITECTURE.md). For the rationale
-behind the split, see [adr/ADR-001-kong-free-architecture.md](adr/ADR-001-kong-free-architecture.md)
-and [adr/ADR-002-crd-control-plane.md](adr/ADR-002-crd-control-plane.md).
+This document is the canonical one-paragraph-per-module guide to `gateway-core`.
+Modules are listed here exactly as they appear in the filesystem (see `gateway-core/`
+on `main`).
 
-## Data plane
+For the architectural context, see [../ARCHITECTURE.md](../ARCHITECTURE.md). For the
+rationale behind the split, see [adr/ADR-001-kong-free-architecture.md](adr/ADR-001-kong-free-architecture.md)
+and [adr/ADR-002-crd-control-plane.md](adr/ADR-002-crd-control-plane.md). For known gaps
+across these modules, see [CRITIQUE.md](CRITIQUE.md).
 
-### 1. `core-gateway`
-
-The data-plane application module. Boots Spring Cloud Gateway on Netty, wires the
-reactive route locator from `core-routing`, and mounts the filter factories from
-`core-filters`, `core-inbound-auth`, `core-rate-limit`, and `core-cors`. Owns
-`Application.java` equivalent (ported from `/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/Application.java`),
-the health endpoint, and the bootstrap-config schema
-(`zone`, `controller.address`, `redis.url`). No business logic lives here; it is
-integration only.
-
-### 2. `core-filters`
-
-The canonical home for request/response filters. Ports `RequestFilter`,
-`UpstreamOAuthFilter`, `RemoveRequestHeaderFilter`, `ResponseFilter`,
-`RequestTransformationFilter`, `ResponseTransformationFilter`, and the body-rewrite
-helpers from
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/filter/`. Adds new
-filters for request validation (size, content-type, optional JSON schema) and
-Resilience4j circuit breakers. Exposes the plugin SPI: any bean extending
-`AbstractGatewayFilterFactory` on the classpath is discoverable by `core-routing`.
-
-### 3. `core-routing`
-
-Dynamic route matching and hot-reload. Owns the `RouteLocator` implementation that is
-fed by snapshots pushed from the controller over gRPC. Performs path / method / host /
-header matching (the job Kong used to do; see
-[adr/ADR-001-kong-free-architecture.md](adr/ADR-001-kong-free-architecture.md) gap #4).
-Performs active upstream health-checks per backend (instance-level), distinct from the
-zone-level health in `core-zone-health`. Supports weighted routing and traffic splits
-for canaries.
-
-### 4. `core-inbound-auth`
-
-Inbound authentication and consumer-identity resolution. Validates client JWTs using
-Spring Security's `ReactiveJwtDecoder` with a cached per-realm JWKS. Resolves
-`GatewayConsumer` + `GatewayCredential` from the pushed snapshot and emits the
-`x-consumer-id`, `x-consumer-custom-id`, `x-consumer-groups`, `x-consumer-username`
-headers (the same set Kong used to emit and that jumper strips in
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/config/RoutingConfiguration.java:52-57`).
-Also supports API-key authentication.
-
-### 5. `core-rate-limit`
-
-Rate limiting via Redis-backed token bucket (Lettuce client). Supports per-consumer,
-per-route, and global policies defined in `GatewayPolicy.rateLimits`. Emits
-`X-RateLimit-*` response headers and Micrometer counters. Reuses the Redis client
-`core-zone-health` already maintains, so the data plane opens only one Redis connection
-pool.
-
-### 6. `core-cors`
-
-CORS preflight handling and header management. Thin wrapper over Spring Cloud Gateway's
-built-in CORS filter with a policy object driven from `GatewayPolicy.cors`. Supports
-per-route overrides and safe defaults (deny-by-default, explicit origins, short
-`max-age`).
-
-## Token & mesh
-
-### 7. `core-token`
-
-All token-related logic: minting RS256 JWTs, fetching OAuth client-credential tokens,
-caching. Direct port of
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/service/TokenGeneratorService.java`,
-`TokenFetchService.java`, `TokenCacheService.java`, and `KeyInfoService.java`, plus the
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/util/OauthTokenUtil.java`
-and `RsaUtils.java` helpers. Caffeine is the cache backend. Supports the five token
-scenarios documented in jumper's README: one-token, LMS legacy, mesh, external OAuth,
-basic, x-token-exchange.
-
-### 8. `core-mesh`
-
-Mesh orchestration glue. Selects the right token scenario per route, parses and honours
-the `jumper_config` header during migration (ADR-004), handles failover-target selection
-(ported from
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/service/JumperConfigService.java`),
-and owns the mesh-specific request mutations (`Consumer-Token` header,
-`X-Spacegate-Token`, `X-Origin-Stargate`, `X-Origin-Zone`). See
-[adr/ADR-003-zone-jwt-mesh.md](adr/ADR-003-zone-jwt-mesh.md) for the wire contract this
-module preserves.
-
-### 9. `core-zone-health`
-
-Zone-health cache and Redis pub/sub. Direct port of
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/service/ZoneHealthCheckService.java`
-and `RedisZoneHealthStatusService.java`, keeping the `zone.health.status` Micrometer
-gauge (`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/service/ZoneHealthCheckService.java:43-56`)
-and the `RedisHealthCheck` job
-(`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/job/RedisHealthCheck.java`).
-Adds an optional publisher role so `gateway-core` itself can emit zone-health messages
-instead of relying on an external job.
+> **Naming note.** Maven artifact IDs and directory names use `kebab-case`;
+> Java packages convert hyphens to underscores (e.g. `gateway-core/rate-limiter/`
+> → `io.telekom.gateway.rate_limiter`). Each module is currently a *standalone*
+> Spring Boot project — there is no aggregating reactor pom yet, which is
+> tracked as a separate follow-up.
 
 ## Control plane
 
-### 10. `core-crd-api`
+### `api-crds`
 
-The Kubernetes CRD definitions and their generated Java POJOs. Houses the OpenAPI
-schemas for `GatewayRoute`, `GatewayConsumer`, `GatewayCredential`, `GatewayZone`,
-`GatewayMeshPeer`, and `GatewayPolicy` (see
-[adr/ADR-002-crd-control-plane.md](adr/ADR-002-crd-control-plane.md) for their design).
-Also owns the snapshot protobuf schema used by the gRPC push channel between controller
-and data plane. Pure code-gen + tests; no runtime.
+Kubernetes Custom Resource Definitions for the six resources the controller reconciles:
+`GatewayRoute`, `GatewayConsumer`, `GatewayCredential`, `GatewayZone`,
+`GatewayMeshPeer`, `GatewayPolicy`. Ships OpenAPI v3 schemas, printer columns, and CEL
+validation rules. Packaged as a pom-only module whose `verify` step runs
+`kubectl kustomize` and (optionally, with `-Pwith-cluster`) `kubectl apply
+--dry-run=client`. No Java.
 
-### 11. `core-controller`
+### `controller`
 
-The reconciler. A Spring Boot app using the fabric8 kubernetes-client informer
-framework to watch CRDs, resolve cross-references, build an immutable `Snapshot`, and
-push deltas to data-plane pods over gRPC. Leader-elected via Kubernetes `Lease`. Updates
-CRD status subresources with `observedGeneration` and `acceptedReplicas`.
+Spring Boot + fabric8 control-plane app. Watches the six CRDs via SharedIndexInformers,
+aggregates their state into an immutable zone-scoped snapshot via `SnapshotBuilder`, and
+pushes to the data-plane pods through `DataPlanePushService`. **Leader election is not
+yet implemented**; the helm chart pins this at `replicaCount: 1` (CRITIQUE F-008).
 
-### 12. `core-admission`
+### `admin-status-api`
 
-The validating admission webhook. Ships in the controller image but is a separate
-module so its logic (schema cross-field invariants, reference checks, policy safety)
-can be unit-tested without spinning a controller. Rejects bad applies at the Kubernetes
-API boundary.
+Reactive read-only HTTP API on port 8091 exposing `/admin/routes`, `/admin/zones`,
+`/admin/consumers`, `/admin/cache-stats`, `/admin/snapshot` plus Swagger UI at
+`/admin/docs`. Consumers override `RuntimeStateReader` to plug in the live runtime view;
+tests use the in-memory default. `/admin/**` is protected by basic auth or mTLS via
+`admin.security.mode`. OpenAPI 3.1 spec shipped at
+`src/main/resources/openapi/admin-api.yaml`.
 
-### 13. `core-config-store`
+### `migration-tool`
 
-In-memory snapshot store and diff engine. Accepts `Snapshot` objects from `core-controller`,
-computes SHA-256 content addresses, stores the last N versions, and emits deltas on
-request. Shared between the controller (server side) and the data-plane's gRPC client
-(which keeps the last-known-good snapshot durable on local disk for restart-time resilience).
+Picocli CLI `gateway-migrate` with subcommands `migrate` / `diff` / `validate`. Reads
+Kong decK YAML and emits gateway-core CRDs (`GatewayRoute`, `GatewayConsumer`,
+`GatewayCredential` + companion `Secret`, `GatewayPolicy`). Kong plugins without a
+mapping (`jwt`, `key-auth`, `prometheus`, `bot-detection`, …) land in
+`UnmigratedReport` with exit code 2 so `diff` surfaces them to operators.
+
+## Data plane
+
+### `proxy`
+
+Greenfield Spring Cloud Gateway WebFlux proxy. Defines the canonical
+`FilterPipelineStage` enum (stages 100-900) and the `PipelineOrderedFilter` base class
+that sibling modules extend. The module currently ships as a skeleton — the routing
+config, admin config-snapshot receiver, and wiring to the sibling filter modules are
+not yet assembled. Running it standalone gives you an empty Spring Boot app; the
+"deployable proxy" assembly PR is the missing integration step.
+
+### `auth-inbound`
+
+Inbound identity resolution. `InboundAuthenticator` with four implementations: JWT
+(Spring Security `ReactiveJwtDecoder`, JWKS-cached), API-key (configurable header or
+query parameter, constant-time store compare), RFC 7617 Basic, RFC 7662 opaque-token
+introspection. `InboundAuthFilter` at pipeline order 200 dispatches by
+`AuthContext.Type`, publishes the `AuthContext` to exchange attributes, returns 401 on
+failure. Constant-time store: `InMemoryCredentialStore` uses SHA-256 digests and
+`MessageDigest.isEqual`.
+
+### `auth-outbound`
+
+Outbound credential minting — the five jumper-era scenarios. Strategies: `OneTokenStrategy`
+(RS256 JWT with claim injection), `MeshTokenStrategy` (peer-zone client-credentials +
+`X-Consumer-Token` propagation), `ExternalOAuthStrategy` (standard client-credentials),
+`BasicAuthStrategy`, `TokenExchangeStrategy` (pass-through `X-Token-Exchange`).
+`TieredTokenCache` = Caffeine + single-flight dedupe + 10 s expiry buffer. Strategies
+publish the outbound `Authorization` value to an exchange attribute; the proxy
+forwarder applies it just before upstream dispatch. `OutboundAuthFilter` at pipeline
+order 600.
+
+### `rate-limiter`
+
+Redis-backed sliding-window limiter. Correctness claim: the limit holds **in aggregate
+across all replicas** via a single atomic Lua script (`EVAL`/`EVALSHA`). API records
+`RateLimitKey` / `RateLimitPolicy` / `RateLimitDecision`; filter at order 300 emits
+`X-RateLimit-Limit` / `-Remaining` / `-Reset` on every response and `429` +
+`Retry-After` on deny. Fail-open on Redis outage (configurable). Proven by a multi-pod
+Testcontainers integration test.
+
+### `mesh-federation`
+
+Zone / realm federation ported from jumper. `ZoneHealthRegistry` with per-zone +
+summary Micrometer gauges, `RedisZoneHealthPubSub` (heartbeat + stale-timeout
+reconciliation on channel `gateway-zone-status`), `FailoverSelector` (pure function),
+`MeshPeerRegistry`, and `MeshFederationFilter` at order 800 that honours
+`X-Failover-Skip-Zone`.
+
+### `request-validation`
+
+First stage in the pipeline (orders 100-140). `CorsPolicy` / `ValidationPolicy` records
++ four filters: `CorsFilter` (preflight + response decoration), `ContentTypeFilter`
+(415 on mismatch), `SizeLimitFilter` (Content-Length fast path + streaming guard,
+releases buffers on overflow), `JsonSchemaFilter` (Caffeine-cached compiled schemas,
+problem+json with JSON Pointer violations).
+
+### `service-discovery`
+
+`ServiceResolver` SPI with k8s `EndpointSlice` watcher, static DNS, and optional
+Consul. `CompositeResolver` dispatches by URI scheme (`k8s://` / `dns://` / `consul://`).
+`WeightedRoundRobin` ports jumper's load-balancing choice. Filter at order 500 rewrites
+`GATEWAY_REQUEST_URL_ATTR` to a concrete endpoint.
+
+### `policy-engine`
+
+Authorization / policy evaluation. `SpelPolicyEvaluator` (default, Caffeine-cached
+parsed expressions) and `RegoPolicyEvaluator` (optional, behind
+`gateway.policy.rego.enabled`). Filter at order 400 returns 403 + `X-Policy-Reason` on
+deny; `add_header:*` and `log` obligations on allow. CRD enum aligned with
+implementation: `engine: [spel, rego]` (CRITIQUE F-015).
+
+### `circuit-breaker`
+
+Resilience4j integration. `ResilienceRegistry` caches per-route `CircuitBreaker` +
+`Bulkhead` instances with tagged Micrometer metrics. `ResilienceFilter` at order 700
+wraps the chain with `Bulkhead → CircuitBreaker → Retry.backoff → chain.filter`.
+Mappings: `CallNotPermitted` → 503, `BulkheadFull` → 429, retries-exhausted → 502.
+Non-idempotent methods skip retry.
+
+### `plugin-spi`
+
+`GatewayPlugin` ServiceLoader SPI (Spring-free API). Hot-reload via `PluginLoader` with
+a daemon `WatchService` — generations reload atomically: new classloader built +
+registry swapped first, **then** previous classloaders closed (ordering from
+CRITIQUE F-016). Ships an `XRequestIdPlugin` example.
 
 ## Cross-cutting
 
-### 14. `core-observability`
+### `observability`
 
-Metrics, structured logging, health endpoints. Ports `NettyMetricsConfig`
-(`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/config/NettyMetricsConfig.java`,
-from PR #102 / commit b3b176f), wires Micrometer to Prometheus, standardizes log
-correlation via MDC, and exposes the `/actuator/health` + `/actuator/metrics` endpoints.
-Defines the metrics taxonomy (`gateway.request.*`, `gateway.token.*`, `zone.health.status`)
-so every module reports consistently.
+RED metrics (per-route counters + timers), Micrometer Prometheus registry, B3 tracing
+via Brave bridge, optional OTLP exporter (profile `otlp`), structured JSON logging via
+`LogstashEncoder`, reactor MDC propagation, Grafana dashboards
+(`gateway-red.json` / `gateway-mesh.json`). `SecretRedactor` scrubs sensitive URL
+parameters + headers before they land in spans; redaction list covers OAuth2 flow
+params (`access_token`, `code`, `state`, `token`, `jwt`) and headers used by the mesh
+flow (`X-Consumer-Token`, `X-API-Key`, `X-Auth-Token`).
 
-### 15. `core-tls`
+### `otel`
 
-Shared TLS configuration. Ports `TlsHardeningConfiguration` and `WarningTrustManager`
-from `/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/config/`.
-Configures both the inbound Netty listener and the outbound `WebClient` so cipher /
-protocol posture is consistent.
+Separate OpenTelemetry module that auto-configures an `OpenTelemetrySdk` bean with
+composite propagation (`tracecontext,baggage,b3multi` for jumper-era interop), OTLP
+exporter via env (`OTEL_EXPORTER_OTLP_ENDPOINT`), reactor context threading, and an
+optional Logback bridge. Ships a docker-compose `otel-collector` service and
+`docs/MIGRATION.md` describing how the observability module should transition off
+Brave onto OTel when ready.
 
-### 16. `core-tracing`
+## Tooling
 
-Tracing plumbing. Ports `TracingConfiguration` and
-`CloudGatewayPrefixedGatewayObservationConvention` from
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/config/`. Supports B3
-Zipkin propagation (jumper README line 330) and OpenTelemetry export; propagates trace
-context between controller and data plane over the gRPC channel too.
+### `cli`
 
-### 17. `core-audit`
+Picocli `gatectl` CLI for operators: `get-routes`, `get-zones`, `get-consumers`,
+`get-mesh-peers`, `describe-route|zone|consumer`, `logs`, `health`. Table / JSON /
+YAML output, kubeconfig context + namespace overrides. Exit codes: 0 success / 1
+command / 2 usage. Tests currently blocked on a Jackson 2.21 ↔ fabric8 6.13.5
+incompatibility in the mock-server path; main sources compile cleanly.
 
-Structured audit logging. Ports
-`/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/service/AuditLogService.java`
-and the `/Users/A85894249/claude-code/gateway-jumper/src/main/java/jumper/model/config/AuditLog.java`
-record. Extends the scope to cover control-plane events (CRD apply, admission decision,
-snapshot push, snapshot ack) on top of the existing data-plane events (request
-forwarded, token minted, failover triggered).
+### `testkit-hydra`
 
-## Tooling & integration
+Ory Hydra integration for realistic OIDC tests. Adds `hydra-db` + `hydra-migrate` +
+`hydra` + `hydra-seed` to `docker-compose.yml`; the seed script generates random
+client secrets (`openssl rand`) for two clients (`client_credentials` and
+`authorization_code`) and writes them to a mode-600 `/secrets/hydra-clients.json`. The
+`HydraClient` + `HydraFixture` helpers let Cucumber tests pull a real JWT without
+baking any secret into the repo.
 
-### 18. `core-migration-tool`
+### `helm-charts`
 
-The Kong + jumper -> CRD converter. Standalone CLI detailed in
-[adr/ADR-004-migration-path.md](adr/ADR-004-migration-path.md). Reads Kong declarative
-YAML, jumper `application.yml`, and the zone's Helm values; emits a complete set of
-`GatewayRoute`, `GatewayConsumer`, `GatewayCredential`, `GatewayZone`, `GatewayMeshPeer`,
-and `GatewayPolicy` manifests plus a migration report. Idempotent. Retired once fleet
-migration completes.
+Two charts — `control-plane` and `data-plane` — plus an umbrella
+`examples/two-zone-mesh/` that wires two zones together with a bundled Redis subchart
+and demo CRs. `verify` runs `helm lint` + `helm template` + optional
+`kubectl --dry-run=client` against the rendered manifests.
 
-### 19. `core-testkit`
+### `docker`
 
-Shared test utilities: Testcontainers helpers for Redis, Kubernetes (`k3s`), and IdPs;
-JWT builders; traffic-replay harness that consumes captured Kong traffic and diffs it
-against `gateway-core`. Supports the shadow-traffic phase in ADR-004 and is the
-backbone of our CI suite. Not packaged in production images.
+Distroless multi-stage Dockerfiles for `controller` and `proxy` on
+`gcr.io/distroless/java21-debian12:nonroot`. Healthchecks set to `NONE` (no shell in
+distroless) — Kubernetes probes handle liveness/readiness instead.
 
-### 20. `core-bom`
+### `load-test-suite`
 
-Maven bill-of-materials. Pins versions for every direct and transitive dependency
-(Spring Boot, Spring Cloud, Lettuce, fabric8, Resilience4j, Caffeine, Nimbus JOSE+JWT,
-gRPC, protobuf). Downstream consumers depend on `core-bom` to inherit consistent
-versions. Owns the project's supported-Java-version policy (currently Java 21).
+Load driver built on reactor-netty + HdrHistogram with lightweight dummy upstreams
+(`FastUpstream`, `SlowUpstream`, `FlakyUpstream`). Scenarios: steady-state, slow-upstream
+connection-growth (proves Pearson r between upstream latency and gateway open-connection
+demand), spike recovery, backpressure, resilience-under-load.
+
+### `e2e-test-suite`
+
+Cross-zone Cucumber suite using Testcontainers: 1 Redis + 3 MockServer upstreams + 3
+embedded gateway-core zones. Features cover the mesh-JWT claim flow
+(`originZone`/`originStargate`/audience), zone-health-aware failover, and
+token-caching single-flight (200 concurrent requests ⇒ 1 peer-token mint).
+
+## Known gaps across the landscape
+
+See [CRITIQUE.md](CRITIQUE.md). The largest missing piece is integration: no
+aggregating reactor pom exists, and no module depends on another — so `proxy` does not
+yet compose the sibling filter modules into a runnable data plane. That integration PR
+is the gating item for any end-to-end perf / ops work.
