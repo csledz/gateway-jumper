@@ -27,13 +27,14 @@ import org.slf4j.MDC;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
+import reactor.util.context.ContextView;
 
 public class LoggingSteps {
 
   private final ObjectMapper mapper = new ObjectMapper();
   private final Map<String, String> pendingMdc = new HashMap<>();
   private Map<String, String> observedMdc;
-  private Context capturedContext;
+  private ContextView capturedContext;
   private String encodedLine;
 
   @After

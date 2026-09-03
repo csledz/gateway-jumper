@@ -21,14 +21,22 @@ import org.springframework.web.util.UriComponentsBuilder;
  * Redacts sensitive parameters and headers before they become part of span names, tags or log
  * lines.
  *
- * <p>Ported from jumper's {@code TracingConfiguration} (lines 31-100) and extended with
- * {@link #redactHeaderValue(String, String)} so that header-based propagation scrubs bearer tokens
- * and similar secrets consistently.
+ * <p>Ported from jumper's {@code TracingConfiguration} (lines 31-100) and extended with {@link
+ * #redactHeaderValue(String, String)} so that header-based propagation scrubs bearer tokens and
+ * similar secrets consistently.
  */
 @Slf4j
 public class SecretRedactor {
 
-  /** Default patterns matching query parameter names that must never appear in spans. */
+  /**
+   * Default patterns matching query parameter names that must never appear in spans.
+   *
+   * <p>The list covers AWS sig-v4 params ({@code X-Amz-*}, {@code sig}, {@code signature}), OAuth2
+   * authorization-code / token-endpoint params ({@code access_token}, {@code refresh_token}, {@code
+   * id_token}, {@code code}, {@code state}, {@code token}, {@code jwt}), and common standalone
+   * credentials ({@code password}, {@code client_secret}, {@code api_key}). Patterns are matched
+   * case-sensitively as regex against the full parameter name.
+   */
   public static final List<String> DEFAULT_QUERY_FILTERS =
       List.of(
           "X-Amz-.*",
@@ -37,11 +45,22 @@ public class SecretRedactor {
           "access_token",
           "refresh_token",
           "id_token",
+          "code",
+          "state",
+          "token",
+          "jwt",
           "password",
           "client_secret",
           "api[_-]?key");
 
-  /** Header names whose values must be redacted (case-insensitive). */
+  /**
+   * Header names whose values must be redacted (case-insensitive).
+   *
+   * <p>Covers RFC 7235 auth ({@code Authorization}, {@code Proxy-Authorization}), cookies, Kong-era
+   * / gateway-core API-key conventions ({@code X-API-Key}, {@code X-Auth-Token}), AWS session
+   * tokens, and the Consumer-Token header used by the mesh-federation strategy to forward the
+   * original inbound bearer to the next zone ({@code X-Consumer-Token}).
+   */
   public static final Set<String> SENSITIVE_HEADER_NAMES =
       Set.of(
           "authorization",
@@ -49,7 +68,9 @@ public class SecretRedactor {
           "cookie",
           "set-cookie",
           "x-api-key",
-          "x-amz-security-token");
+          "x-amz-security-token",
+          "x-auth-token",
+          "x-consumer-token");
 
   private static final String REDACTED = "[redacted]";
 
@@ -61,8 +82,8 @@ public class SecretRedactor {
   }
 
   /**
-   * @param extraQueryFilters additional regex patterns applied on top of
-   *     {@link #DEFAULT_QUERY_FILTERS}.
+   * @param extraQueryFilters additional regex patterns applied on top of {@link
+   *     #DEFAULT_QUERY_FILTERS}.
    */
   public SecretRedactor(List<String> extraQueryFilters) {
     List<String> all = new ArrayList<>(DEFAULT_QUERY_FILTERS);
